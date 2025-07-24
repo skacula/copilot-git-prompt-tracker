@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// Initialize services
 	const configManager = new ConfigurationManager();
 	const gitService = new GitService();
-	const githubService = new GitHubService(context.secrets);
+	const githubService = new GitHubService();
 
 	// Initialize the prompt tracker
 	promptTracker = new CopilotPromptTracker(
@@ -53,6 +53,11 @@ export function activate(context: vscode.ExtensionContext) {
 		() => promptTracker.toggle()
 	);
 
+	const signOutCommand = vscode.commands.registerCommand(
+		'copilotPromptTracker.signOut',
+		() => promptTracker.signOut()
+	);
+
 	// Add all commands to subscriptions
 	context.subscriptions.push(
 		configureCommand,
@@ -60,7 +65,8 @@ export function activate(context: vscode.ExtensionContext) {
 		savePromptFromTemplateCommand,
 		viewHistoryCommand,
 		viewProjectPromptsCommand,
-		toggleCommand
+		toggleCommand,
+		signOutCommand
 	);
 
 	// Initialize the tracker

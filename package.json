@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onAuthenticationRequest:github"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -45,6 +46,11 @@
         "command": "copilotPromptTracker.toggle",
         "title": "Toggle Prompt Tracking",
         "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.signOut",
+        "title": "Sign Out from GitHub",
+        "category": "Copilot Prompt Tracker"
       }
     ],
     "configuration": {
@@ -74,6 +80,11 @@
           ],
           "default": "prompts",
           "description": "Directory in the repository where prompts will be saved"
+        },
+        "copilotPromptTracker.defaultPrivateRepo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create private repositories by default (recommended for security)"
         }
       }
     },
@@ -97,6 +108,10 @@
         },
         {
           "command": "copilotPromptTracker.toggle",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.signOut",
           "when": "true"
         }
       ]

@@ -91,7 +91,11 @@ export class CopilotPromptTracker implements vscode.Disposable {
 
             // Get current user to construct repo string
             try {
-                const username = await this.githubService.getCurrentUser();
+                const username = await this.githubService.getCurrentUserLogin();
+                if (!username) {
+                    vscode.window.showErrorMessage('Failed to get GitHub username. Please try again.');
+                    return;
+                }
                 repoString = `${username}/${newRepo.name}`;
                 await this.configManager.updateConfiguration('githubRepo', repoString);
                 vscode.window.showInformationMessage(`Repository "${repoString}" created successfully!`);
@@ -555,6 +559,17 @@ export class CopilotPromptTracker implements vscode.Disposable {
             this.statusBarItem.text = '$(x) Copilot Tracker';
             this.statusBarItem.tooltip = 'Copilot tracking disabled';
             this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+        }
+    }
+
+    public async signOut(): Promise<void> {
+        try {
+            await this.githubService.signOut();
+            this.updateStatusBar();
+            vscode.window.showInformationMessage('Successfully signed out from GitHub');
+        } catch (error) {
+            console.error('Error during sign out:', error);
+            vscode.window.showErrorMessage('Failed to sign out from GitHub');
         }
     }
 

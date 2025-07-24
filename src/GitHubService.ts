@@ -22,10 +22,10 @@ export interface PromptEntry {
 
 export class GitHubService {
     private octokit: any = null;
-    private readonly secretsStorage: vscode.SecretStorage;
+    private currentSession: vscode.AuthenticationSession | null = null;
 
-    constructor(secretsStorage: vscode.SecretStorage) {
-        this.secretsStorage = secretsStorage;
+    constructor() {
+        // No longer need secrets storage - VS Code handles OAuth
     }
 
     private async loadOctokit() {
@@ -45,68 +45,99 @@ export class GitHubService {
         try {
             const OctokitClass = await this.loadOctokit();
 
-            let token = await this.secretsStorage.get('github.token');
+            console.log('Starting GitHub authentication...');
 
-            if (!token) {
-                token = await this.promptForToken();
-                if (!token) {
-                    return false;
-                }
-                await this.secretsStorage.store('github.token', token);
-            }
-
-            this.octokit = new OctokitClass({
-                auth: token,
+            // Use VS Code's built-in GitHub authentication
+            this.currentSession = await vscode.authentication.getSession('github', ['repo'], { 
+                createIfNone: true,
+                clearSessionPreference: false
             });
 
-            // Verify the token works
-            await this.octokit.rest.users.getAuthenticated();
+            if (!this.currentSession) {
+                console.log('No GitHub session available');
+                return false;
+            }
+
+            console.log('GitHub authentication successful for user:', this.currentSession.account.label);
+            console.log('Session scopes:', this.currentSession.scopes);
+
+            this.octokit = new OctokitClass({
+                auth: this.currentSession.accessToken,
+            });
+
+            // Verify the token works and get user info
+            console.log('Verifying authentication with GitHub API...');
+            const { data: user } = await this.octokit.rest.users.getAuthenticated();
+            console.log('Authenticated GitHub user:', user.login);
+            console.log('User type:', user.type);
+            console.log('User permissions:', user.permissions);
+            
             return true;
         } catch (error) {
             console.error('GitHub authentication failed:', error);
 
-            // Clear invalid token
-            await this.secretsStorage.delete('github.token');
+            // Clear session if authentication failed
+            if (this.currentSession) {
+                try {
+                    await vscode.authentication.getSession('github', ['repo'], { 
+                        clearSessionPreference: true 
+                    });
+                } catch (clearError) {
+                    console.error('Failed to clear session:', clearError);
+                }
+            }
 
             vscode.window.showErrorMessage(
-                'GitHub authentication failed. Please check your token and try again.'
+                'GitHub authentication failed. Please try signing in again.'
             );
             return false;
         }
     }
 
-    private async promptForToken(): Promise<string | undefined> {
-        const instruction = 'Create a Personal Access Token';
-        const createToken = 'Create Token';
+    public async signOut(): Promise<void> {
+        if (this.currentSession) {
+            try {
+                // Clear the session preference to force re-authentication next time
+                await vscode.authentication.getSession('github', ['repo'], { 
+                    clearSessionPreference: true 
+                });
+                this.currentSession = null;
+                this.octokit = null;
+                console.log('GitHub sign out successful');
+            } catch (error) {
+                console.error('Error during sign out:', error);
+            }
+        }
+    }
 
-        const action = await vscode.window.showInformationMessage(
-            'A GitHub Personal Access Token is required to save prompts to your repository.',
-            createToken,
-            'Cancel'
-        );
+    public isAuthenticated(): boolean {
+        return this.currentSession !== null && this.octokit !== null;
+    }
 
-        if (action === createToken) {
-            await vscode.env.openExternal(
-                vscode.Uri.parse('https://github.com/settings/tokens/new?scopes=repo&description=VSCode%20Copilot%20Prompt%20Tracker')
-            );
+    public getCurrentUser(): string | undefined {
+        // For repository operations, we need the GitHub username, not the display name
+        // Let's use a synchronous approach that gets the username from the API call
+        if (!this.octokit) {
+            return undefined;
         }
 
-        const token = await vscode.window.showInputBox({
-            prompt: 'Enter your GitHub Personal Access Token',
-            placeHolder: 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-            password: true,
-            validateInput: (value: string) => {
-                if (!value.trim()) {
-                    return 'Token cannot be empty';
-                }
-                if (!value.trim().startsWith('ghp_') && !value.trim().startsWith('github_pat_')) {
-                    return 'Invalid token format';
-                }
-                return null;
-            }
-        });
+        // We'll cache the username after authentication
+        // The account.label might be the display name, not the username
+        return this.currentSession?.account.label;
+    }
 
-        return token?.trim();
+    public async getCurrentUserLogin(): Promise<string | undefined> {
+        if (!this.octokit) {
+            return undefined;
+        }
+
+        try {
+            const { data: user } = await this.octokit.rest.users.getAuthenticated();
+            return user.login;
+        } catch (error) {
+            console.error('Failed to get current user:', error);
+            return undefined;
+        }
     }
 
     public async savePromptToRepository(
@@ -333,13 +364,11 @@ export class GitHubService {
     }
 
     public async clearAuthentication(): Promise<void> {
-        await this.secretsStorage.delete('github.token');
-        this.octokit = null;
+        // Clear the GitHub session
+        await this.signOut();
     }
 
-    public isAuthenticated(): boolean {
-        return this.octokit !== null;
-    }
+
 
     public async createRepository(name: string, description?: string): Promise<boolean> {
         if (!this.octokit) {
@@ -349,19 +378,90 @@ export class GitHubService {
             }
         }
 
+        // Ask user about repository visibility
+        const config = vscode.workspace.getConfiguration('copilotPromptTracker');
+        const defaultPrivate = config.get<boolean>('defaultPrivateRepo', true);
+        
+        const visibilityChoice = await vscode.window.showQuickPick([
+            {
+                label: '$(lock) Private Repository',
+                description: 'Only you can see this repository (Recommended for prompts)',
+                detail: 'Your prompts and code context will be kept private',
+                picked: defaultPrivate,
+                value: true
+            },
+            {
+                label: '$(globe) Public Repository', 
+                description: 'Anyone can see this repository',
+                detail: 'Consider carefully - prompts may contain sensitive code context',
+                picked: !defaultPrivate,
+                value: false
+            }
+        ], {
+            placeHolder: 'Choose repository visibility',
+            title: 'Repository Privacy Settings'
+        });
+
+        if (!visibilityChoice) {
+            // User cancelled
+            return false;
+        }
+
+        const isPrivate = visibilityChoice.value;
+
+        console.log(`Creating repository "${name}" with visibility: ${isPrivate ? 'private' : 'public'}`);
+
         try {
-            await this.octokit!.rest.repos.createForAuthenticatedUser({
+            console.log('Attempting to create repository with Octokit...');
+            const createResult = await this.octokit!.rest.repos.createForAuthenticatedUser({
                 name,
                 description: description || 'Repository for storing Copilot prompts and AI interactions',
-                private: false,
+                private: isPrivate,
                 auto_init: true,
                 gitignore_template: 'Node'
             });
 
-            // Create initial README
+            console.log('Repository created successfully:', createResult.data.full_name);
+
+            // Wait a moment for GitHub to fully initialize the repository
+            console.log('Waiting for repository initialization...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Check if README already exists (due to auto_init: true)
+            console.log('Checking if README already exists...');
+            let readmeExists = false;
+            try {
+                await this.octokit!.rest.repos.getContent({
+                    owner: createResult.data.owner.login,
+                    repo: name,
+                    path: 'README.md'
+                });
+                readmeExists = true;
+                console.log('README already exists, will update it');
+            } catch (error: any) {
+                if (error.status === 404) {
+                    console.log('README does not exist, will create it');
+                } else {
+                    console.log('Error checking README existence:', error);
+                }
+            }
+
+            // Create or update README with our content
+            console.log(readmeExists ? 'Updating README file...' : 'Creating README file...');
+            const currentUser = createResult.data.owner.login; // Use the owner from the creation response
+            
             const readmeContent = `# Copilot Prompts Repository
 
 This repository stores Copilot prompts and AI interactions from multiple projects.
+
+## ⚠️ Privacy Notice
+
+This repository contains AI prompts and code context from your development work. Please be mindful of:
+- Code snippets and file paths in prompt context
+- Project-specific information and architectural details  
+- Potential sensitive data in prompts or responses
+
+${isPrivate ? '🔒 This is a **private repository** - only you can access it.' : '🌐 This is a **public repository** - anyone can view your prompts and code context.'}
 
 ## Structure
 
@@ -384,20 +484,62 @@ Each prompt file contains:
 Generated by VS Code Copilot Git Prompt Tracker extension.
 `;
 
+            console.log('Encoding README content...');
             const encodedReadme = Buffer.from(readmeContent).toString('base64');
+            
+            // Get the existing README SHA if it exists
+            let existingSha: string | undefined;
+            if (readmeExists) {
+                try {
+                    const existingReadme = await this.octokit!.rest.repos.getContent({
+                        owner: currentUser,
+                        repo: name,
+                        path: 'README.md'
+                    });
+                    if ('sha' in existingReadme.data) {
+                        existingSha = existingReadme.data.sha;
+                    }
+                } catch (error) {
+                    console.log('Error getting existing README SHA:', error);
+                }
+            }
+            
             await this.octokit!.rest.repos.createOrUpdateFileContents({
-                owner: await this.getCurrentUser(),
+                owner: currentUser,
                 repo: name,
                 path: 'README.md',
-                message: 'Initialize repository with README',
-                content: encodedReadme
+                message: readmeExists ? 'Update README with Copilot Prompt Tracker info' : 'Initialize repository with README',
+                content: encodedReadme,
+                ...(existingSha && { sha: existingSha })
+            });
+
+            console.log('Repository setup completed successfully!');
+
+            // Show confirmation with privacy reminder
+            const visibilityText = isPrivate ? 'private' : 'public';
+            vscode.window.showInformationMessage(
+                `✅ Repository "${name}" created successfully as ${visibilityText}!`,
+                'View Repository'
+            ).then(selection => {
+                if (selection === 'View Repository') {
+                    const repoUrl = `https://github.com/${currentUser}/${name}`;
+                    vscode.env.openExternal(vscode.Uri.parse(repoUrl));
+                }
             });
 
             return true;
         } catch (error: any) {
-            console.error('Failed to create repository:', error);
+            console.error('Failed to create repository - Full error:', error);
+            console.error('Error status:', error.status);
+            console.error('Error message:', error.message);
+            console.error('Error response:', error.response?.data);
+            
             if (error.status === 422) {
                 vscode.window.showErrorMessage(`Repository "${name}" already exists or name is invalid.`);
+            } else if (error.status === 401) {
+                vscode.window.showErrorMessage('Authentication failed. Please sign out and sign in again.');
+            } else if (error.status === 403) {
+                vscode.window.showErrorMessage('Insufficient permissions to create repository. Please check your GitHub account permissions.');
             } else {
                 vscode.window.showErrorMessage(`Failed to create repository: ${error.message}`);
             }
@@ -424,17 +566,7 @@ Generated by VS Code Copilot Git Prompt Tracker extension.
         }
     }
 
-    public async getCurrentUser(): Promise<string> {
-        if (!this.octokit) {
-            const authenticated = await this.authenticate();
-            if (!authenticated) {
-                throw new Error('Not authenticated');
-            }
-        }
 
-        const { data: user } = await this.octokit!.rest.users.getAuthenticated();
-        return user.login;
-    }
 
     private sanitizeProjectName(repositoryName: string): string {
         // Extract project name from various repository formats
