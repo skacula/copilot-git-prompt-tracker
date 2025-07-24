@@ -129,7 +129,7 @@ Perfect for developers working on multiple projects:
 
 ```bash
 git clone <repository-url>
-cd vscode-copilot-git-prompt-commit
+cd copilot-git-prompt-tracker
 npm install
 npm run compile
 ```
