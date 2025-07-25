@@ -3,10 +3,8 @@ import { CopilotPromptTracker } from './CopilotPromptTracker';
 import { GitHubService } from './GitHubService';
 import { GitService } from './GitService';
 import { ConfigurationManager } from './ConfigurationManager';
-import { PromptViewProvider } from './PromptViewProvider';
 
 let promptTracker: CopilotPromptTracker;
-let promptViewProvider: PromptViewProvider;
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('=== Copilot Git Prompt Tracker Extension Activated ===');
@@ -18,17 +16,6 @@ export function activate(context: vscode.ExtensionContext) {
 	const gitService = new GitService();
 	const githubService = new GitHubService();
 
-	// Initialize the prompt view provider
-	promptViewProvider = new PromptViewProvider(context, githubService, configManager);
-
-	// Register webview provider
-	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider(
-			PromptViewProvider.viewType,
-			promptViewProvider
-		)
-	);
-
 	// Initialize the prompt tracker with session monitoring
 	promptTracker = new CopilotPromptTracker(
 		context,
@@ -36,18 +23,6 @@ export function activate(context: vscode.ExtensionContext) {
 		gitService,
 		githubService
 	);
-
-	// Register missing commands
-	const refreshViewCommand = vscode.commands.registerCommand(
-		'copilotPromptTracker.refreshView',
-		() => {
-			console.log('Extension: Refresh view command triggered');
-			if (promptViewProvider) {
-				promptViewProvider.refresh();
-			}
-		}
-	);
-	context.subscriptions.push(refreshViewCommand);
 
 	// Initialize the tracker
 	promptTracker.initialize().then(() => {
@@ -69,6 +44,4 @@ export function deactivate() {
 	if (promptTracker) {
 		promptTracker.dispose();
 	}
-	
-	// promptViewProvider doesn't need explicit disposal as it's handled by VS Code
 }

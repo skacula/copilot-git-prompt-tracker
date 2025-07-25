@@ -68,6 +68,21 @@
         "category": "Copilot Prompt Tracker"
       },
       {
+        "command": "copilotPromptTracker.showSession",
+        "title": "Show Current Session",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.recordInteraction",
+        "title": "Record Interaction",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.correlateWithCommit",
+        "title": "Correlate with Commit",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
         "command": "copilotPromptTracker.signOut",
         "title": "Sign Out from GitHub",
         "category": "Copilot Prompt Tracker"
@@ -164,6 +179,18 @@
         {
           "command": "copilotPromptTracker.signOut",
           "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.showSession",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.recordInteraction",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.correlateWithCommit",
+          "when": "true"
         }
       ],
       "view/title": [
@@ -210,5 +237,23 @@
   "dependencies": {
     "@octokit/rest": "^22.0.0",
     "simple-git": "^3.28.0"
-  }
+  },
+  "repository": {
+        "type": "git",
+        "url": "https://github.com/wcolon/copilot-git-prompt-tracker.git"
+    },
+    "bugs": {
+        "url": "https://github.com/wcolon/copilot-git-prompt-tracker/issues"
+    },
+    "homepage": "https://github.com/wcolon/copilot-git-prompt-tracker#readme",
+    "license": "MIT",
+    "keywords": [
+        "copilot",
+        "git",
+        "prompt",
+        "tracking",
+        "ai",
+        "github",
+        "monitoring"
+    ]
 }

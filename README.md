@@ -1,368 +1,287 @@
-# Copilot Git Prompt Tracker 🚀
+# Copilot Git Prompt Tracker
 
-A comprehensive VS Code extension that automatically captures Copilot prompts and saves them to GitHub repositories with full Git context, featuring enterprise-grade security and multi-project support.
+A VS Code extension that **monitors** your GitHub Copilot interactions and correlates them with Git commits to provide insights into your AI-assisted development workflow.
+
+## 🎯 Purpose
+
+This extension is designed to **passively monitor and track** your actual Copilot interactions, then correlate them with Git commits to understand how AI assistance influences your development process. It does **not** suggest prompts or templates, but rather focuses on capturing and analyzing your natural workflow.
 
 ## ✨ Key Features
 
-### 🔒 **Enterprise Security**
-- **Multi-Layer Protection**: Detects and redacts API keys, tokens, passwords, and sensitive data
-- **Project-Aware Security**: Uses your `.gitignore` patterns to identify sensitive files
-- **Content Sanitization**: JWT tokens, database URLs, environment variables automatically redacted
-- **File Context Protection**: Sensitive files (`.env`, certificates, secrets) automatically excluded
+### 🔍 Session-Based Monitoring
+- **Development Sessions**: Groups related Copilot interactions into logical sessions
+- **Automatic Correlation**: Links sessions with Git commits when you correlate manually
+- **File Context Awareness**: Tracks which files were involved in each interaction
+- **Time-Based Filtering**: Focuses on recent, relevant interactions
 
-### 💬 **Intelligent Copilot Integration**
-- **Automatic Chat Detection**: Reads VS Code Copilot chat history automatically
-- **Seamless Fallback**: Manual input when automatic detection isn't available
-- **Smart Extraction**: Captures both prompts and responses with context
+### 🛡️ Advanced Security Protection
+- **Multi-Layer Content Sanitization**: Automatically removes sensitive data before storage
+- **API Key Detection**: Identifies and redacts OpenAI, GitHub, GitLab, Google, AWS, and other API keys
+- **Environment Variable Protection**: Detects and sanitizes environment variables and secrets
+- **Project-Specific .gitignore Integration**: Respects your project's ignore patterns
+- **JWT Token Detection**: Identifies and redacts JSON Web Tokens
+- **Database URL Sanitization**: Protects database connection strings
 
-### 🔗 **Advanced Project Management**
-- **Multi-Project Support**: Single repository for all your projects with automatic organization
-- **Per-Project Configuration**: Custom settings stored in `.vscode/copilot-prompt-tracker.json`
-- **Repository Creation**: Automatically creates and initializes GitHub repositories
-- **Smart Organization**: Project-based folder structure with chronological naming
+### 📊 Interaction Tracking
+- **Multiple Interaction Types**: Monitors chat, inline suggestions, and code comments
+- **Rich Context Capture**: Records file names, languages, code selections, and timestamps
+- **Response Recording**: Captures both your prompts and Copilot's responses
+- **Automatic Detection**: Attempts to identify Copilot-generated code changes
 
-### 📊 **Rich Context & History**
-- **Complete Git Context**: Commit hash, branch, author, changed files captured automatically
-- **Interactive GUI**: Activity bar integration with prompt history viewer
-- **Template System**: Predefined templates for common scenarios (bug fixes, features, reviews)
-- **Searchable History**: Easy browsing and filtering of past prompts
+### 🔗 Git Integration
+- **Commit Correlation**: Manually trigger correlation between sessions and commits
+- **Branch Tracking**: Records which branch interactions occurred on
+- **Author Information**: Captures commit author details
+- **Repository Context**: Links interactions to specific repositories
 
-### 🛡️ **Privacy & Control**
-- **Your Data, Your Repository**: Everything stored in your own GitHub repository
-- **Configurable Visibility**: Public or private repository support
-- **Secure Authentication**: GitHub OAuth integration with enhanced error handling
-- **No External Dependencies**: No third-party services or data collection
+## 🚀 Getting Started
 
-## 🚀 Quick Start
+### Prerequisites
+- VS Code with GitHub Copilot installed and configured
+- A Git repository
+- A GitHub account for storing session data
 
-### 1. Install & Configure
-```bash
-# Install from VS Code Marketplace or clone source
-git clone https://github.com/skacula/copilot-git-prompt-tracker.git
-cd copilot-git-prompt-tracker
-npm install && npm run compile
-```
+### Installation
+1. Install the extension from the VS Code marketplace
+2. Open a project with Git initialized
+3. Configure your GitHub repository for storing sessions
 
-### 2. Set Up Repository
-- Open Command Palette (`Cmd+Shift+P`)
-- Run **"Copilot Prompt Tracker: Configure GitHub Repository"**
-- Choose to create new or select existing repository
-- Authenticate with GitHub (OAuth or Personal Access Token)
+### Initial Configuration
+1. Click the Copilot icon in the status bar
+2. Select "Configure Repository"
+3. Enter your GitHub repository in the format: `owner/repo-name`
+4. The extension will handle GitHub authentication automatically
 
-### 3. Start Tracking
-- Use **"Save Current Prompt"** - automatically detects recent Copilot chat
-- Use **"Save Prompt from Template"** for structured scenarios
-- View prompts via the Activity Bar or **"View Prompt History"**
+## 🎮 Usage
 
-## 🔒 Security Features
+### Monitoring Workflow
 
-### Multi-Layer Protection System
+The extension works in the background to monitor your development sessions:
 
-#### **1. Built-in Pattern Detection**
-```typescript
-// Automatically detects and redacts:
-- OpenAI API keys (sk-*)
-- GitHub tokens (ghp_*, gho_*, github_pat_*)
-- GitLab tokens (glpat-*)
-- Google API keys (AIza*)
-- Environment variables (*_KEY, *_SECRET, *_TOKEN, *_PASSWORD)
-- JWT tokens (complete 3-part tokens)
-- Database URLs (postgres://, mongodb://, mysql://)
-- AWS credentials (AKIA*, access keys)
-```
+1. **Start Working**: Begin coding with Copilot as usual
+2. **Interactions Are Tracked**: The extension automatically detects potential Copilot interactions
+3. **Manual Recording** (when needed): Use commands to capture specific interactions
+4. **Commit Correlation**: When ready to commit, correlate your session with the commit
 
-#### **2. Project-Specific Protection (.gitignore Integration)**
-```bash
-# Your .gitignore patterns automatically protect:
-*.log          # Log files
-.env*          # Environment files  
-secrets/       # Secret directories
-*.key          # Certificate files
-node_modules/  # Dependencies
-dist/          # Build artifacts
-```
+### Available Commands
 
-#### **3. File Context Protection**
-- Automatically excludes context from sensitive files
-- Redacts content from `.env`, `.key`, `.pem` files
-- Removes file paths that match sensitive patterns
-- Warns users when sensitive content is detected
+Access these through the Command Palette (`Cmd+Shift+P`):
 
-### Security in Action
-```typescript
-// Before (dangerous):
-{
-  "prompt": "Here's my API key: sk-1234567890abcdef...",
-  "fileContext": { "fileName": ".env", "content": "DATABASE_URL=postgres://..." }
-}
+- **`Copilot Tracker: Show Current Session`** - View your current development session and recent interactions
+- **`Copilot Tracker: Record Interaction`** - Manually record a Copilot interaction
+- **`Copilot Tracker: Capture Last Chat`** - Capture your most recent Copilot chat (manual input for now)
+- **`Copilot Tracker: Correlate with Commit`** - Link current session with Git commit and save to GitHub
+- **`Copilot Tracker: Configure`** - Set up or change GitHub repository
 
-// After (secure):
-{
-  "prompt": "Here's my API key: [REDACTED]\n\n[WARNING: Sensitive data redacted]",
-  "fileContext": null
-}
-```
+### Status Bar Integration
 
-## 📁 Repository Structure
+The status bar shows:
+- Number of interactions in current session
+- Configuration status
+- Quick access to session view
 
-```text
-your-prompts-repo/
-├── prompts/
-│   ├── frontend-project/
-│   │   ├── prompt-2025-07-25T10-30-00-123Z.json
-│   │   └── prompt-2025-07-25T14-45-30-456Z.json
-│   ├── backend-api/
-│   │   ├── prompt-2025-07-25T11-15-00-789Z.json
-│   │   └── prompt-2025-07-25T16-20-15-012Z.json
-│   └── mobile-app/
-│       └── prompt-2025-07-25T18-30-45-345Z.json
-├── .gitignore
-└── README.md (auto-generated with project overview)
-```
+## 💾 Data Storage
 
-### Prompt File Structure
+### Session Data Structure
 ```json
 {
-  "timestamp": "2025-07-25T10:30:00.123Z",
-  "prompt": "How do I implement user authentication?",
-  "response": "Here are several approaches to implement authentication...",
+  "sessionId": "session-1234567890-abcdef",
+  "startTime": "2024-01-15T10:30:00.000Z",
+  "endTime": "2024-01-15T11:45:00.000Z",
+  "interactions": [
+    {
+      "id": "interaction-1234567890-xyz",
+      "timestamp": "2024-01-15T10:35:00.000Z",
+      "prompt": "How do I implement authentication?",
+      "response": "Here's a secure way to implement authentication...",
+      "interactionType": "chat",
+      "fileContext": {
+        "fileName": "src/auth.ts",
+        "language": "typescript",
+        "selection": { "start": {"line": 10, "character": 0}, "end": {"line": 15, "character": 20} }
+      }
+    }
+  ],
   "gitInfo": {
     "commitHash": "abc123def456",
-    "branch": "feature/auth-system", 
-    "author": "John Doe <john@example.com>",
-    "repository": "my-project",
-    "changedFiles": ["src/auth.js", "tests/auth.test.js"]
+    "branch": "feature/auth",
+    "author": "Your Name",
+    "repository": "your-org/your-repo",
+    "changedFiles": ["src/auth.ts", "src/types.ts"],
+    "commitMessage": "Implement user authentication system"
   },
   "metadata": {
-    "vscodeVersion": "1.102.2",
-    "extensionVersion": "0.0.1"
-  },
-  "fileContext": {
-    "fileName": "src/auth.js",
-    "language": "javascript"
+    "vscodeVersion": "1.85.0",
+    "extensionVersion": "1.0.0",
+    "workspaceFolder": "/path/to/your/project"
   }
 }
 ```
 
-## �️ Complete Command Reference
+### GitHub Storage Format
+Sessions are converted to structured prompt entries and stored in your configured GitHub repository:
 
-| Command | Description | Shortcut |
-|---------|-------------|----------|
-| **Configure GitHub Repository** | Set up repository and authentication | |
-| **Save Current Prompt** | Auto-detect and save recent Copilot chat | |
-| **Save Prompt from Template** | Use predefined templates | |
-| **View Prompt History** | Browse all prompts across projects | |
-| **View Project Prompts** | Current project's prompts only | |
-| **Toggle Prompt Tracking** | Enable/disable extension | |
-| **Test Project Configuration** | Debug project settings | |
-| **Test GitHub Authentication** | Verify GitHub connection | |
-| **Debug Current Configuration** | Show detailed configuration info | |
-
-## 📋 Template System
-
-### Built-in Templates
-- **🐛 Bug Fix**: Document debugging sessions and solutions
-- **✨ Feature Request**: Track new feature development
-- **🔍 Code Review**: Save review-related AI interactions  
-- **🔄 Refactoring**: Document code improvement sessions
-- **🧪 Testing**: Track test generation and debugging
-- **📖 Learning**: Educational prompts and explanations
-- **🚀 Performance**: Optimization-related discussions
-
-### Custom Templates
-Create your own templates with variable substitution:
-```typescript
+```json
 {
-  "id": "custom-debug",
-  "title": "Custom Debug Session",
-  "template": "I'm debugging {issue} in {file}. The expected behavior is {expected} but I'm getting {actual}. Here's the relevant code:\n\n{code}",
-  "variables": ["issue", "file", "expected", "actual", "code"]
+  "prompt": "Development Session: session-1234567890-abcdef\nDuration: 2024-01-15T10:30:00.000Z to 2024-01-15T11:45:00.000Z\nTotal Interactions: 3\n\nCopilot Interactions:\n[1] CHAT: How do I implement authentication?\n[2] INLINE: Code generation in src/auth.ts\n[3] CHAT: How to add password validation?",
+  "response": "[1] Here's a secure way to implement authentication...\n[2] [Generated code content]\n[3] You can add password validation using...",
+  "timestamp": "2024-01-15T11:45:00.000Z",
+  "gitInfo": {
+    "commitHash": "abc123def456",
+    "branch": "feature/auth",
+    "author": "Your Name",
+    "repository": "your-org/your-repo",
+    "changedFiles": ["src/auth.ts", "src/types.ts"]
+  },
+  "metadata": {
+    "vscodeVersion": "1.85.0",
+    "extensionVersion": "1.0.0"
+  }
 }
 ```
 
-## ⚙️ Configuration
+## 🔒 Security & Privacy
 
-### Global Settings (VS Code Settings)
+### Comprehensive Protection
+This extension implements multiple layers of security to protect sensitive information:
+
+### 🔐 Pattern-Based Detection
+- **API Keys**: OpenAI, GitHub, GitLab, Google Cloud, AWS, Azure, Stripe, etc.
+- **Tokens**: JWT tokens, Bearer tokens, Access tokens
+- **Secrets**: Environment variables, Database URLs, Private keys
+- **Custom Patterns**: Extensible pattern matching system
+
+### 📁 Project-Aware Filtering  
+- **`.gitignore` Integration**: Automatically respects your project's ignore patterns
+- **Directory Matching**: Supports complex directory-based ignore rules
+- **Path Normalization**: Handles different path formats consistently
+
+### 🛡️ Multi-Layer Sanitization
+1. **Content Scanning**: All prompts and responses are scanned for sensitive patterns
+2. **File Context Protection**: Code snippets and file contents are sanitized
+3. **Path Sanitization**: File paths are checked against ignore patterns
+4. **Safe Defaults**: Unknown patterns are conservatively redacted
+
+### Example Protection
+```typescript
+// Before sanitization:
+const apiKey = "sk-1234567890abcdefghijklmnopqrstuvwxyz";
+const dbUrl = "mongodb://username:password@cluster.mongodb.net/database";
+
+// After sanitization:
+const apiKey = "[REDACTED_API_KEY]";
+const dbUrl = "[REDACTED_DATABASE_URL]";
+```
+
+## 🧪 Testing
+
+The extension includes comprehensive unit tests covering:
+
+### ✅ Session Monitoring Tests
+- Session creation and management
+- Interaction tracking and filtering
+- Commit correlation functionality
+- File context capture
+
+### ✅ Security Tests  
+- API key detection and redaction
+- Environment variable protection
+- .gitignore pattern matching
+- Content sanitization validation
+
+### ✅ Integration Tests
+- Configuration management
+- GitHub service integration
+- Git service functionality
+
+### Running Tests
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run specific test suite
+npm test -- --grep "CopilotSessionMonitor"
+```
+
+## 🔧 Configuration
+
+### Extension Settings
+Configure through VS Code settings (`Cmd+,`):
+
 ```json
 {
-  "copilotPromptTracker.githubRepo": "username/my-prompts",
+  "copilotPromptTracker.githubRepo": "your-username/your-repo",
   "copilotPromptTracker.enabled": true,
   "copilotPromptTracker.autoSave": false,
   "copilotPromptTracker.saveLocation": "prompts"
 }
 ```
 
-### Per-Project Settings (`.vscode/copilot-prompt-tracker.json`)
-```json
-{
-  "githubRepo": "team/shared-prompts",
-  "saveLocation": "ai-sessions",
-  "projectName": "frontend-app",
-  "enabled": true
-}
+### Advanced Configuration
+- **Session Timeout**: Sessions automatically timeout after 30 minutes of inactivity
+- **Max Interactions**: Sessions are limited to 50 interactions to prevent memory issues
+- **Cleanup Frequency**: Old sessions are cleaned up hourly, keeping the most recent 100
+
+## 🔄 Architecture
+
+### Core Components
+
+1. **CopilotSessionMonitor**: Manages development sessions and interaction tracking
+2. **CopilotPromptTracker**: Main orchestrator coordinating all components
+3. **ContentSanitizer**: Multi-layer security and content protection
+4. **GitService**: Git repository integration and commit information
+5. **GitHubService**: GitHub API integration for data storage
+6. **ConfigurationManager**: Extension settings and user preferences
+
+### Session Lifecycle
+
+```mermaid
+graph TD
+    A[Start Session] --> B[Monitor Interactions]
+    B --> C[Detect Copilot Usage]
+    C --> D[Capture Context]
+    D --> B
+    B --> E[Manual Correlation Trigger]
+    E --> F[Finalize Session]
+    F --> G[Sanitize Content]
+    G --> H[Save to GitHub]
+    H --> A
 ```
 
-## 🧪 Testing & Quality Assurance
+## 🤝 Contributing
 
-### Comprehensive Test Suite ✅
-- **19 Unit Tests** covering all functionality
-- **Security Pattern Testing** for all sensitive data types
-- **GitIgnore Integration Testing** with various patterns
-- **Copilot Chat Reader Testing** for automatic detection
-- **Mock Data Testing** for edge cases and error scenarios
-
-### Test Coverage
-```bash
-npm test  # Run full test suite
-
-# Test Results:
-✅ ConfigurationManager Tests (3 tests)
-✅ PromptTemplateManager Tests (5 tests)  
-✅ ContentSanitizer Tests (7 tests)
-✅ CopilotChatReader Tests (3 tests)
-✅ Extension Integration Test (1 test)
-
-ALL 19 TESTS PASSING 🎉
-```
-
-### Security Verification
-```bash
-# Automated security testing confirms:
-✅ API key detection and redaction
-✅ Environment variable protection
-✅ JWT token sanitization
-✅ Database URL redaction
-✅ File context filtering
-✅ GitIgnore pattern matching
-```
-
-## 🤝 Multi-Project Workflows
-
-### Individual Developer
-```bash
-# Single repository for all projects
-my-ai-prompts/
-├── web-frontend/     # React/Vue prompts
-├── mobile-app/       # Flutter/React Native
-├── backend-api/      # Node.js/Python API
-└── data-analysis/    # Python/R analytics
-```
-
-### Team Collaboration
-```bash
-# Shared team repository
-team-ai-knowledge/
-├── onboarding/       # New developer prompts
-├── code-reviews/     # Review assistance
-├── debugging/        # Common issues & solutions
-└── best-practices/   # Standardized approaches
-```
-
-### Enterprise Usage
-```bash
-# Department-wide knowledge base
-engineering-ai-prompts/
-├── frontend-team/
-├── backend-team/
-├── devops-team/
-├── qa-team/
-└── architecture/
-```
-
-## 📖 Advanced Use Cases
-
-### Learning & Development
-- **Pattern Recognition**: Identify common prompt patterns that work well
-- **Knowledge Building**: Create searchable database of AI interactions
-- **Skill Tracking**: Monitor learning progress across different technologies
-
-### Code Review Enhancement
-- **Context Preservation**: Reference AI assistance during code reviews
-- **Quality Improvement**: Learn from effective prompts across the team
-- **Decision Documentation**: Record AI-assisted architectural decisions
-
-### Debugging & Problem Solving
-- **Solution Database**: Build repository of debugging approaches
-- **Error Pattern Matching**: Identify recurring issues and solutions
-- **Team Knowledge Sharing**: Leverage collective problem-solving experience
-
-## 🔧 Development & Contributing
-
-### Prerequisites
-- VS Code 1.102.0+
-- Node.js 18+
-- Git repository
-- GitHub account
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ### Development Setup
 ```bash
-git clone https://github.com/skacula/copilot-git-prompt-tracker.git
-cd copilot-git-prompt-tracker
+# Clone the repository
+git clone https://github.com/your-username/copilot-git-prompt-tracker.git
+
+# Install dependencies
 npm install
-npm run compile
-npm run watch  # For development
-npm test       # Run test suite
+
+# Start development mode
+npm run watch
+
+# Run tests
+npm test
 ```
 
-### Build & Package
-```bash
-npm run compile     # TypeScript compilation
-npm run lint        # ESLint checking  
-npm run package     # Create VSIX package
-```
+## 📜 License
 
-### Architecture Overview
-```text
-Extension Structure:
-├── ConfigurationManager    # Project & global settings
-├── GitHubService           # OAuth & repository operations
-├── GitService              # Git context extraction
-├── CopilotPromptTracker    # Main orchestration
-├── CopilotChatReader       # Automatic chat detection
-├── ContentSanitizer        # Security & data protection
-├── PromptTemplateManager   # Template system
-└── PromptViewProvider      # GUI components
-```
-
-## 🛡️ Privacy & Security Commitment
-
-### Data Ownership
-- **Your Data**: Everything stored in your own GitHub repository
-- **No Tracking**: Extension doesn't collect or transmit data to third parties
-- **Local Processing**: All sanitization and processing happens locally
-
-### Security Measures
-- **OAuth Integration**: Secure GitHub authentication
-- **Token Encryption**: Credentials stored using VS Code's SecretStorage
-- **Content Filtering**: Multi-layer sensitive data detection
-- **Access Control**: Repository-level access control via GitHub
-
-### Compliance
-- **GDPR Ready**: No personal data collection by extension
-- **Enterprise Friendly**: Works with GitHub Enterprise
-- **Audit Trail**: Complete history in your repository
-
-## 📄 License & Support
-
-### License
 MIT License - see [LICENSE](LICENSE) file for details.
 
-### Contributing
-Contributions welcome! Please:
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Run tests (`npm test`)
-4. Commit changes (`git commit -m 'Add amazing feature'`)
-5. Push to branch (`git push origin feature/amazing-feature`)
-6. Open Pull Request
+## 🐛 Issues & Support
 
-### Support & Issues
-- **Bug Reports**: Use GitHub Issues with detailed reproduction steps
-- **Feature Requests**: Use GitHub Issues with use case description
-- **Security Issues**: Email security@[domain] for responsible disclosure
+- Report bugs on [GitHub Issues](https://github.com/your-username/copilot-git-prompt-tracker/issues)
+- Feature requests welcome
+- Check existing issues before creating new ones
 
----
+## 🎉 Acknowledgments
 
-**Made with ❤️ for the developer community**
-
-*Enhance your AI-assisted development workflow while keeping your data secure and organized.*
+- GitHub Copilot team for the amazing AI coding assistant
+- VS Code team for the extensible editor platform
+- Open source community for inspiration and tools
