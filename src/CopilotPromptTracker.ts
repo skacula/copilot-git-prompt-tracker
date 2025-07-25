@@ -3,15 +3,19 @@ import { ConfigurationManager, NewRepositoryConfig } from './ConfigurationManage
 import { GitService, GitInfo } from './GitService';
 import { GitHubService, PromptEntry } from './GitHubService';
 import { PromptTemplateManager, PromptTemplate } from './PromptTemplateManager';
+import { CopilotChatReader } from './CopilotChatReader';
+import { ContentSanitizer } from './ContentSanitizer';
 
 export class CopilotPromptTracker implements vscode.Disposable {
     private readonly context: vscode.ExtensionContext;
     private readonly configManager: ConfigurationManager;
     private readonly gitService: GitService;
     private readonly githubService: GitHubService;
+    private readonly copilotChatReader: CopilotChatReader;
     private readonly disposables: vscode.Disposable[] = [];
     private currentPromptData: { prompt: string; response?: string } | null = null;
     private statusBarItem: vscode.StatusBarItem;
+    private promptViewRefreshCallback?: () => void;
 
     constructor(
         context: vscode.ExtensionContext,
@@ -23,6 +27,7 @@ export class CopilotPromptTracker implements vscode.Disposable {
         this.configManager = configManager;
         this.gitService = gitService;
         this.githubService = githubService;
+        this.copilotChatReader = new CopilotChatReader();
 
         // Create status bar item
         this.statusBarItem = vscode.window.createStatusBarItem(
@@ -33,6 +38,10 @@ export class CopilotPromptTracker implements vscode.Disposable {
         this.updateStatusBar();
         this.statusBarItem.show();
         this.disposables.push(this.statusBarItem);
+    }
+
+    public setPromptViewRefreshCallback(callback: () => void) {
+        this.promptViewRefreshCallback = callback;
     }
 
     public async initialize(): Promise<void> {
@@ -53,10 +62,164 @@ export class CopilotPromptTracker implements vscode.Disposable {
 
     private setupCopilotMonitoring(): void {
         // Note: VS Code doesn't provide direct API to monitor Copilot chat
-        // This is a placeholder for future implementation or workaround
-        // We'll focus on manual prompt saving for now
+        // But we can try to access the chat history from VS Code's storage
 
-        console.log('Copilot monitoring setup (manual mode)');
+        console.log('Copilot monitoring setup (attempting to access chat history)');
+        
+        // Try to set up file system monitoring for Copilot chat data
+        this.setupCopilotChatMonitoring();
+    }
+
+    private async setupCopilotChatMonitoring(): Promise<void> {
+        try {
+            // VS Code stores Copilot chat history in its application data
+            // Let's try to monitor for new chat sessions
+            const os = require('os');
+            const path = require('path');
+            
+            // Common paths where VS Code stores data
+            const possiblePaths = [
+                path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'),
+                path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'CachedExtensions'),
+                path.join(os.homedir(), '.vscode', 'extensions')
+            ];
+            
+            console.log('CopilotPromptTracker: Looking for Copilot chat data in:', possiblePaths);
+            
+            // For now, we'll implement a command to capture the last Copilot interaction
+            this.registerCopilotCaptureCommand();
+            
+        } catch (error) {
+            console.error('Failed to setup Copilot chat monitoring:', error);
+        }
+    }
+
+    private registerCopilotCaptureCommand(): void {
+        // Register a command to capture recent Copilot interactions
+        const captureCommand = vscode.commands.registerCommand(
+            'copilotPromptTracker.captureLastCopilotChat',
+            async () => {
+                try {
+                    await this.captureLastCopilotInteraction();
+                } catch (error) {
+                    vscode.window.showErrorMessage(`Failed to capture Copilot chat: ${error}`);
+                }
+            }
+        );
+        this.disposables.push(captureCommand);
+    }
+
+    private async captureLastCopilotInteraction(): Promise<void> {
+        console.log('CopilotPromptTracker: Attempting to capture last Copilot interaction');
+        
+        try {
+            // First, try to automatically read the last Copilot chat
+            const lastChat = await this.copilotChatReader.getLastUserPrompt();
+            
+            if (lastChat) {
+                console.log('CopilotPromptTracker: Found recent Copilot chat');
+                
+                // Show the user what we found and ask for confirmation
+                const shouldSave = await vscode.window.showQuickPick([
+                    {
+                        label: '✅ Save this interaction',
+                        description: `"${lastChat.prompt.substring(0, 50)}${lastChat.prompt.length > 50 ? '...' : ''}"`
+                    },
+                    {
+                        label: '✏️ Edit before saving',
+                        description: 'Modify the prompt or response before saving'
+                    },
+                    {
+                        label: '❌ Cancel',
+                        description: 'Don\'t save this interaction'
+                    }
+                ], {
+                    placeHolder: 'Found recent Copilot interaction. What would you like to do?'
+                });
+
+                if (!shouldSave || shouldSave.label.includes('Cancel')) {
+                    return;
+                }
+
+                let finalPrompt = lastChat.prompt;
+                let finalResponse = lastChat.response;
+
+                if (shouldSave.label.includes('Edit')) {
+                    // Let user edit the prompt
+                    const editedPrompt = await vscode.window.showInputBox({
+                        prompt: 'Edit the Copilot prompt',
+                        value: lastChat.prompt,
+                        ignoreFocusOut: true
+                    });
+
+                    if (!editedPrompt) {
+                        return;
+                    }
+
+                    finalPrompt = editedPrompt;
+
+                    // Let user edit the response
+                    if (lastChat.response) {
+                        const editedResponse = await vscode.window.showInputBox({
+                            prompt: 'Edit Copilot\'s response (optional)',
+                            value: lastChat.response,
+                            ignoreFocusOut: true
+                        });
+                        finalResponse = editedResponse || lastChat.response;
+                    }
+                }
+
+                console.log('CopilotPromptTracker: Saving captured Copilot interaction');
+                await this.savePrompt(finalPrompt, finalResponse);
+
+                vscode.window.showInformationMessage('✅ Copilot interaction saved successfully!');
+                return;
+            }
+
+            // Fallback: Ask user to manually enter the prompt
+            console.log('CopilotPromptTracker: No recent chat found, falling back to manual entry');
+            
+            const activeEditor = vscode.window.activeTextEditor;
+            let contextInfo = '';
+            
+            if (activeEditor) {
+                const selection = activeEditor.selection;
+                const selectedText = activeEditor.document.getText(selection);
+                const fileName = activeEditor.document.fileName;
+                
+                if (selectedText) {
+                    contextInfo = `\n\nContext from ${fileName}:\n${selectedText}`;
+                }
+            }
+
+            const manualPrompt = await vscode.window.showInputBox({
+                prompt: 'Enter the prompt you just sent to Copilot',
+                placeHolder: 'e.g., "Explain this function" or "Add error handling to this code"',
+                ignoreFocusOut: true
+            });
+
+            if (!manualPrompt) {
+                vscode.window.showInformationMessage('Cancelled saving Copilot interaction');
+                return;
+            }
+
+            const response = await vscode.window.showInputBox({
+                prompt: 'Enter Copilot\'s response (optional)',
+                placeHolder: 'Leave empty if you just want to save the prompt',
+                ignoreFocusOut: true
+            });
+
+            const enhancedPrompt = manualPrompt + contextInfo;
+
+            console.log('CopilotPromptTracker: Saving manually entered Copilot interaction');
+            await this.savePrompt(enhancedPrompt, response);
+
+            vscode.window.showInformationMessage('✅ Copilot interaction saved successfully!');
+
+        } catch (error) {
+            console.error('Failed to capture Copilot interaction:', error);
+            vscode.window.showErrorMessage(`Failed to capture Copilot interaction: ${error}`);
+        }
     }
 
     public async configure(): Promise<void> {
@@ -150,37 +313,59 @@ export class CopilotPromptTracker implements vscode.Disposable {
     }
 
     public async saveCurrentPrompt(): Promise<void> {
-        const config = this.configManager.getConfiguration();
+        console.log('CopilotPromptTracker: saveCurrentPrompt called - trying automatic capture first');
+        
+        try {
+            // First, try to automatically capture the last Copilot interaction
+            await this.captureLastCopilotInteraction();
+        } catch (error) {
+            console.error('CopilotPromptTracker: Auto-capture failed, falling back to manual entry');
+            
+            // Fallback to manual entry
+            await this.saveCurrentPromptManual();
+        }
+    }
 
-        if (!this.configManager.isConfigured()) {
-            const action = 'Configure Now';
-            const result = await vscode.window.showWarningMessage(
-                'Please configure GitHub repository first.',
-                action
-            );
-            if (result === action) {
-                await this.configure();
+    public async saveCurrentPromptManual(): Promise<void> {
+        console.log('CopilotPromptTracker: saveCurrentPromptManual called');
+        
+        try {
+            // Validate configuration first
+            const isValid = await this.validateProjectConfiguration();
+            if (!isValid) {
+                console.log('CopilotPromptTracker: Configuration validation failed');
+                return;
             }
-            return;
+
+            const config = this.configManager.getConfiguration();
+            console.log('CopilotPromptTracker: Using configuration:', config);
+
+            // Get prompt text from user
+            const prompt = await vscode.window.showInputBox({
+                prompt: 'Enter the Copilot prompt you want to save',
+                placeHolder: 'Describe what you asked Copilot...'
+            });
+
+            if (!prompt) {
+                console.log('CopilotPromptTracker: User cancelled prompt input');
+                return;
+            }
+
+            // Get optional response
+            const response = await vscode.window.showInputBox({
+                prompt: 'Enter Copilot\'s response (optional)',
+                placeHolder: 'Paste Copilot\'s response or leave empty...'
+            });
+
+            console.log('CopilotPromptTracker: Saving prompt with text length:', prompt.length);
+            console.log('CopilotPromptTracker: Response length:', response ? response.length : 0);
+            const result = await this.savePrompt(prompt, response);
+            console.log('CopilotPromptTracker: savePrompt result:', result);
+
+        } catch (error) {
+            console.error('CopilotPromptTracker: Error in saveCurrentPromptManual:', error);
+            vscode.window.showErrorMessage(`Error saving prompt: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-
-        // Get prompt text from user
-        const prompt = await vscode.window.showInputBox({
-            prompt: 'Enter the Copilot prompt you want to save',
-            placeHolder: 'Describe what you asked Copilot...'
-        });
-
-        if (!prompt) {
-            return;
-        }
-
-        // Get optional response
-        const response = await vscode.window.showInputBox({
-            prompt: 'Enter Copilot\'s response (optional)',
-            placeHolder: 'Paste Copilot\'s response or leave empty...'
-        });
-
-        await this.savePrompt(prompt, response);
     }
 
     public async savePromptFromTemplate(): Promise<void> {
@@ -271,13 +456,22 @@ export class CopilotPromptTracker implements vscode.Disposable {
     }
 
     private async savePrompt(prompt: string, response?: string): Promise<void> {
+        console.log('CopilotPromptTracker: savePrompt called with prompt length:', prompt.length);
+        
         try {
             const config = this.configManager.getConfiguration();
+            console.log('CopilotPromptTracker: Using config:', config);
+            
             const [owner, repo] = config.githubRepo.split('/');
+            console.log(`CopilotPromptTracker: Parsed repository: ${owner}/${repo}`);
 
             // Get current Git info
+            console.log('CopilotPromptTracker: Getting Git info...');
             const gitInfo = await this.gitService.getCurrentGitInfo();
+            console.log('CopilotPromptTracker: Git info:', gitInfo);
+            
             if (!gitInfo) {
+                console.log('CopilotPromptTracker: No Git info available');
                 vscode.window.showWarningMessage(
                     'No Git repository found. Saving prompt without Git context.'
                 );
@@ -285,7 +479,11 @@ export class CopilotPromptTracker implements vscode.Disposable {
 
             // Get current file context
             const activeEditor = vscode.window.activeTextEditor;
+            console.log('CopilotPromptTracker: Active editor:', !!activeEditor);
+            
+            console.log('CopilotPromptTracker: Getting changed files...');
             const changedFiles = await this.gitService.getChangedFiles();
+            console.log('CopilotPromptTracker: Changed files:', changedFiles);
 
             // Create prompt entry
             const promptEntry: PromptEntry = {
@@ -316,26 +514,54 @@ export class CopilotPromptTracker implements vscode.Disposable {
                         end: activeEditor.selection.end
                     }
                 };
+                console.log('CopilotPromptTracker: Added file context for:', document.fileName);
+            }
+
+            console.log('CopilotPromptTracker: Created prompt entry:', promptEntry);
+
+            // SECURITY: Sanitize entire prompt entry to remove sensitive data
+            console.log('CopilotPromptTracker: Sanitizing prompt entry for security...');
+            const originalEntry = JSON.stringify(promptEntry);
+            
+            // Get workspace root for .gitignore-aware sanitization
+            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const sanitizedPromptEntry = ContentSanitizer.sanitizePromptEntry(promptEntry, workspaceRoot);
+            
+            // Check if any sensitive content was detected and redacted
+            if (JSON.stringify(sanitizedPromptEntry) !== originalEntry) {
+                console.warn('CopilotPromptTracker: Sensitive content detected and redacted from prompt entry');
+                vscode.window.showWarningMessage(
+                    'Sensitive data detected and removed from prompt before saving (API keys, passwords, etc.)'
+                );
             }
 
             // Save to GitHub
+            console.log(`CopilotPromptTracker: Saving to GitHub ${owner}/${repo} in ${config.saveLocation}`);
             const saved = await this.githubService.savePromptToRepository(
                 owner,
                 repo,
-                promptEntry,
+                sanitizedPromptEntry,
                 config.saveLocation
             );
 
             if (saved) {
+                console.log('CopilotPromptTracker: Prompt saved successfully');
                 vscode.window.showInformationMessage(
                     `Prompt saved to ${config.githubRepo}/${config.saveLocation}`
                 );
+                
+                // Refresh the prompt view if available
+                if (this.promptViewRefreshCallback) {
+                    console.log('CopilotPromptTracker: Refreshing prompt view');
+                    this.promptViewRefreshCallback();
+                }
             } else {
+                console.error('CopilotPromptTracker: Failed to save prompt');
                 vscode.window.showErrorMessage('Failed to save prompt to GitHub.');
             }
 
         } catch (error) {
-            console.error('Error saving prompt:', error);
+            console.error('CopilotPromptTracker: Error in savePrompt:', error);
             vscode.window.showErrorMessage(
                 `Failed to save prompt: ${error instanceof Error ? error.message : 'Unknown error'}`
             );
@@ -571,6 +797,66 @@ export class CopilotPromptTracker implements vscode.Disposable {
             console.error('Error during sign out:', error);
             vscode.window.showErrorMessage('Failed to sign out from GitHub');
         }
+    }
+
+    public async validateProjectConfiguration(): Promise<boolean> {
+        console.log('CopilotPromptTracker: Validating project configuration');
+        
+        // Check if global configuration exists
+        if (!this.configManager.isConfigured()) {
+            vscode.window.showWarningMessage(
+                'Copilot Prompt Tracker is not configured.',
+                'Configure Now'
+            ).then(selection => {
+                if (selection === 'Configure Now') {
+                    vscode.commands.executeCommand('copilotPromptTracker.configure');
+                }
+            });
+            return false;
+        }
+
+        const config = this.configManager.getConfiguration();
+        
+        if (!config.enabled) {
+            vscode.window.showWarningMessage(
+                'Copilot prompt tracking is disabled.',
+                'Enable Tracking'
+            ).then(selection => {
+                if (selection === 'Enable Tracking') {
+                    vscode.commands.executeCommand('copilotPromptTracker.toggle');
+                }
+            });
+            return false;
+        }
+
+        if (!config.githubRepo) {
+            vscode.window.showWarningMessage(
+                'No GitHub repository configured.',
+                'Configure Repository'
+            ).then(selection => {
+                if (selection === 'Configure Repository') {
+                    vscode.commands.executeCommand('copilotPromptTracker.configure');
+                }
+            });
+            return false;
+        }
+
+        // Validate repository format
+        const repoParts = config.githubRepo.split('/');
+        if (repoParts.length !== 2) {
+            vscode.window.showErrorMessage(
+                `Invalid repository format: ${config.githubRepo}. Expected format: owner/repo-name`,
+                'Fix Configuration'
+            ).then(selection => {
+                if (selection === 'Fix Configuration') {
+                    vscode.commands.executeCommand('copilotPromptTracker.configure');
+                }
+            });
+            return false;
+        }
+
+        console.log(`CopilotPromptTracker: Configuration valid for repository: ${config.githubRepo}`);
+        return true;
     }
 
     public dispose(): void {

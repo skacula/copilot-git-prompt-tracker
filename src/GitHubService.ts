@@ -28,7 +28,7 @@ export class GitHubService {
         // No longer need secrets storage - VS Code handles OAuth
     }
 
-    private async loadOctokit() {
+    public async loadOctokit() {
         if (!Octokit) {
             try {
                 const octokitModule = await import('@octokit/rest');
@@ -110,8 +110,40 @@ export class GitHubService {
         }
     }
 
+    public async ensureAuthenticated(): Promise<boolean> {
+        console.log('GitHubService: Ensuring authentication...');
+        
+        if (this.isAuthenticated()) {
+            console.log('GitHubService: Already authenticated, verifying with API...');
+            
+            // Verify the authentication actually works
+            try {
+                const { data: user } = await this.octokit.rest.users.getAuthenticated();
+                console.log(`GitHubService: Authentication verified for user: ${user.login}`);
+                return true;
+            } catch (error: any) {
+                console.error('GitHubService: Authentication verification failed:', error);
+                // Clear the invalid session
+                this.currentSession = null;
+                this.octokit = null;
+            }
+        }
+        
+        console.log('GitHubService: Not authenticated or verification failed, attempting to authenticate...');
+        const result = await this.authenticate();
+        console.log(`GitHubService: Authentication result: ${result}`);
+        
+        return result;
+    }
+
     public isAuthenticated(): boolean {
-        return this.currentSession !== null && this.octokit !== null;
+        const hasSession = this.currentSession !== null;
+        const hasOctokit = this.octokit !== null;
+        const hasValidToken = this.currentSession?.accessToken !== undefined;
+        
+        console.log(`GitHubService: Authentication check - session: ${hasSession}, octokit: ${hasOctokit}, token: ${hasValidToken}`);
+        
+        return hasSession && hasOctokit && hasValidToken;
     }
 
     public getCurrentUser(): string | undefined {
@@ -140,20 +172,120 @@ export class GitHubService {
         }
     }
 
+    public async getUserOrganizations(): Promise<Array<{login: string, avatar_url: string}>> {
+        if (!this.octokit) {
+            throw new Error('GitHub service not authenticated');
+        }
+
+        try {
+            const { data: orgs } = await this.octokit.rest.orgs.listForAuthenticatedUser({
+                per_page: 100
+            });
+            return orgs.map((org: any) => ({
+                login: org.login,
+                avatar_url: org.avatar_url
+            }));
+        } catch (error) {
+            console.error('Failed to get user organizations:', error);
+            return [];
+        }
+    }
+
+    public async getUserRepositories(owner?: string): Promise<Array<{name: string, full_name: string, private: boolean, description: string | null}>> {
+        if (!this.octokit) {
+            throw new Error('GitHub service not authenticated');
+        }
+
+        try {
+            let repositories;
+            
+            if (owner) {
+                // Get repositories for a specific organization
+                const { data: repos } = await this.octokit.rest.repos.listForOrg({
+                    org: owner,
+                    per_page: 100,
+                    sort: 'updated',
+                    type: 'all'
+                });
+                repositories = repos;
+            } else {
+                // Get user's own repositories
+                const { data: repos } = await this.octokit.rest.repos.listForAuthenticatedUser({
+                    per_page: 100,
+                    sort: 'updated',
+                    affiliation: 'owner,collaborator,organization_member'
+                });
+                repositories = repos;
+            }
+
+            return repositories.map((repo: any) => ({
+                name: repo.name,
+                full_name: repo.full_name,
+                private: repo.private,
+                description: repo.description
+            }));
+        } catch (error) {
+            console.error('Failed to get repositories:', error);
+            return [];
+        }
+    }
+
     public async savePromptToRepository(
         owner: string,
         repo: string,
         promptEntry: PromptEntry,
         saveLocation: string = 'prompts'
     ): Promise<boolean> {
-        if (!this.octokit) {
-            const authenticated = await this.authenticate();
-            if (!authenticated) {
+        try {
+            console.log(`GitHubService: savePromptToRepository called - owner: ${owner}, repo: ${repo}, saveLocation: ${saveLocation}`);
+            
+            // Ensure we're authenticated before proceeding
+            const authResult = await this.ensureAuthenticated();
+            if (!authResult) {
+                console.error('GitHubService: Failed to authenticate');
+                vscode.window.showErrorMessage('GitHub authentication failed. Please try signing in again.');
                 return false;
             }
-        }
 
-        try {
+            console.log(`GitHubService: Saving prompt to ${owner}/${repo} in ${saveLocation}`);
+            
+            // Check if repository exists and user has access
+            try {
+                const repoInfo = await this.octokit!.rest.repos.get({ owner, repo });
+                console.log(`GitHubService: Repository ${owner}/${repo} exists and accessible`);
+                console.log(`GitHubService: Repository details - private: ${repoInfo.data.private}, permissions: ${JSON.stringify(repoInfo.data.permissions)}`);
+            } catch (repoError: any) {
+                console.error(`GitHubService: Repository ${owner}/${repo} not accessible:`, repoError.status, repoError.message);
+                
+                if (repoError.status === 404) {
+                    vscode.window.showErrorMessage(
+                        `Repository ${owner}/${repo} does not exist. Please create it first using "Initialize Project Configuration" command.`
+                    );
+                } else {
+                    vscode.window.showErrorMessage(`Cannot access repository ${owner}/${repo}. Please check if it exists and you have permissions.`);
+                }
+                return false;
+            }
+
+            // Check if prompts directory exists, create if it doesn't
+            let dirExists = false;
+            try {
+                await this.octokit!.rest.repos.getContent({
+                    owner,
+                    repo,
+                    path: saveLocation,
+                });
+                dirExists = true;
+                console.log(`GitHubService: Directory ${saveLocation} exists`);
+            } catch (dirError: any) {
+                if (dirError.status === 404) {
+                    console.log(`GitHubService: Directory ${saveLocation} doesn't exist, will create it`);
+                    dirExists = false;
+                } else {
+                    console.error(`GitHubService: Error checking directory:`, dirError);
+                    throw dirError;
+                }
+            }
             // Create project-specific directory structure
             const projectName = this.sanitizeProjectName(promptEntry.gitInfo.repository);
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

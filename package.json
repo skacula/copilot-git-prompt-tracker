@@ -48,9 +48,41 @@
         "category": "Copilot Prompt Tracker"
       },
       {
+        "command": "copilotPromptTracker.initializeProject",
+        "title": "Initialize Project Configuration",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.testConfiguration",
+        "title": "Test Project Configuration",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.testAuth",
+        "title": "Test GitHub Authentication",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.captureLastCopilotChat",
+        "title": "Capture Last Copilot Chat",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
         "command": "copilotPromptTracker.signOut",
         "title": "Sign Out from GitHub",
         "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.openView",
+        "title": "Open Prompts View",
+        "category": "Copilot Prompt Tracker",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "copilotPromptTracker.refreshView",
+        "title": "Refresh Prompts",
+        "category": "Copilot Prompt Tracker",
+        "icon": "$(refresh)"
       }
     ],
     "configuration": {
@@ -88,6 +120,25 @@
         }
       }
     },
+    "views": {
+      "copilotPromptTracker": [
+        {
+          "id": "copilotPromptTracker.promptsView",
+          "name": "Prompts",
+          "type": "webview",
+          "when": "true"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "copilotPromptTracker",
+          "title": "Copilot Prompt Tracker",
+          "icon": "resources/tracker-icon.svg"
+        }
+      ]
+    },
     "menus": {
       "commandPalette": [
         {
@@ -113,6 +164,18 @@
         {
           "command": "copilotPromptTracker.signOut",
           "when": "true"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "copilotPromptTracker.refreshView",
+          "when": "view == copilotPromptTracker.promptsView",
+          "group": "navigation"
+        },
+        {
+          "command": "copilotPromptTracker.configure",
+          "when": "view == copilotPromptTracker.promptsView",
+          "group": "navigation"
         }
       ]
     }
