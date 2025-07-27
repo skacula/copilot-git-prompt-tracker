@@ -652,10 +652,51 @@ ${interactions}`;
     }
 
     public dispose(): void {
-        this.disposables.forEach(d => d.dispose());
-        this.copilotIntegrationService.dispose();
-        this.smartSessionManager.dispose();
-        this.backgroundMonitoringService.dispose();
-        this.gitService.dispose();
+        console.log('CopilotPromptTracker: Starting disposal...');
+        
+        // Dispose of all registered disposables first
+        this.disposables.forEach(d => {
+            try {
+                d.dispose();
+            } catch (error) {
+                console.error('Error disposing resource:', error);
+            }
+        });
+        
+        // Clear the disposables array
+        this.disposables.length = 0;
+        
+        // Dispose of services in reverse order of initialization
+        try {
+            this.backgroundMonitoringService.dispose();
+        } catch (error) {
+            console.error('Error disposing backgroundMonitoringService:', error);
+        }
+        
+        try {
+            this.smartSessionManager.dispose();
+        } catch (error) {
+            console.error('Error disposing smartSessionManager:', error);
+        }
+        
+        try {
+            this.copilotIntegrationService.dispose();
+        } catch (error) {
+            console.error('Error disposing copilotIntegrationService:', error);
+        }
+        
+        try {
+            this.gitService.dispose();
+        } catch (error) {
+            console.error('Error disposing gitService:', error);
+        }
+        
+        try {
+            this.githubService.dispose();
+        } catch (error) {
+            console.error('Error disposing githubService:', error);
+        }
+        
+        console.log('CopilotPromptTracker: Disposal completed');
     }
 }

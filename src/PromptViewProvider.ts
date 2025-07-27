@@ -2,11 +2,12 @@ import * as vscode from 'vscode';
 import { GitHubService, PromptEntry } from './GitHubService';
 import { ConfigurationManager } from './ConfigurationManager';
 
-export class PromptViewProvider implements vscode.WebviewViewProvider {
+export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
     public static readonly viewType = 'copilotPromptTracker.promptsView';
     
     private _view?: vscode.WebviewView;
     private readonly _extensionUri: vscode.Uri;
+    private _disposed = false;
     
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -54,7 +55,7 @@ export class PromptViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async refreshPrompts() {
-        if (!this._view) {
+        if (!this._view || this._disposed) {
             return;
         }
 
@@ -388,7 +389,16 @@ ${prompt.response}
     }
 
     public refresh() {
-        this.refreshPrompts();
+        if (!this._disposed) {
+            this.refreshPrompts();
+        }
+    }
+
+    public dispose() {
+        console.log('PromptViewProvider: Starting disposal...');
+        this._disposed = true;
+        this._view = undefined;
+        console.log('PromptViewProvider: Disposal completed');
     }
 }
 

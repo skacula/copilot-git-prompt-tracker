@@ -66,9 +66,21 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
 	console.log('Copilot Git Prompt Tracker extension is being deactivated');
 	
-	if (promptTracker) {
-		promptTracker.dispose();
+	try {
+		if (promptTracker) {
+			promptTracker.dispose();
+		}
+	} catch (error) {
+		console.error('Error disposing promptTracker:', error);
 	}
 	
-	// promptViewProvider doesn't need explicit disposal as it's handled by VS Code
+	try {
+		if (promptViewProvider) {
+			promptViewProvider.dispose();
+		}
+	} catch (error) {
+		console.error('Error disposing promptViewProvider:', error);
+	}
+	
+	console.log('Copilot Git Prompt Tracker extension deactivation completed');
 }

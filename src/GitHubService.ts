@@ -370,25 +370,36 @@ export class GitHubService {
                 prompts.push(...projectPrompts);
             } else {
                 // List prompts from all projects
-                const { data: contents } = await this.octokit!.rest.repos.getContent({
-                    owner,
-                    repo,
-                    path: saveLocation,
-                });
+                try {
+                    const { data: contents } = await this.octokit!.rest.repos.getContent({
+                        owner,
+                        repo,
+                        path: saveLocation,
+                    });
 
-                if (Array.isArray(contents)) {
-                    for (const item of contents) {
-                        if (item.type === 'dir') {
-                            // This is a project directory
-                            const projectPrompts = await this.getPromptsFromDirectory(owner, repo, item.path);
-                            prompts.push(...projectPrompts);
-                        } else if (item.type === 'file' && item.name.endsWith('.json')) {
-                            // Legacy format - prompts directly in root
-                            const promptEntry = await this.getPromptFromFile(owner, repo, item.path);
-                            if (promptEntry) {
-                                prompts.push(promptEntry);
+                    if (Array.isArray(contents)) {
+                        for (const item of contents) {
+                            if (item.type === 'dir') {
+                                // This is a project directory
+                                const projectPrompts = await this.getPromptsFromDirectory(owner, repo, item.path);
+                                prompts.push(...projectPrompts);
+                            } else if (item.type === 'file' && item.name.endsWith('.json')) {
+                                // Legacy format - prompts directly in root
+                                const promptEntry = await this.getPromptFromFile(owner, repo, item.path);
+                                if (promptEntry) {
+                                    prompts.push(promptEntry);
+                                }
                             }
                         }
+                    }
+                } catch (dirError: any) {
+                    if (dirError.status === 404) {
+                        // Save location directory doesn't exist yet - this is expected for new repositories
+                        console.log(`GitHubService: Directory '${saveLocation}' doesn't exist in ${owner}/${repo} yet. This is normal for new repositories.`);
+                        return [];
+                    } else {
+                        // Re-throw other errors
+                        throw dirError;
                     }
                 }
             }
@@ -398,10 +409,6 @@ export class GitHubService {
 
             return prompts;
         } catch (error: any) {
-            if (error.status === 404) {
-                // Directory doesn't exist yet, which is fine
-                return [];
-            }
             console.error('Failed to list prompts:', error);
             return [];
         }
