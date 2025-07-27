@@ -133,4 +133,12 @@ export class ConfigurationManager {
 
         return undefined;
     }
+
+    /**
+     * Clean up resources
+     */
+    public dispose(): void {
+        // ConfigurationManager doesn't hold resources that need cleanup
+        // This method is provided for consistency with other services
+    }
 }

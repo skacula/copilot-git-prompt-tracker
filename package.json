@@ -2,7 +2,7 @@
   "name": "copilot-git-prompt-tracker",
   "displayName": "Copilot Git Prompt Tracker",
   "description": "Track and save Copilot prompts to GitHub repository for commit history association",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "your-publisher-name",
   "engines": {
     "vscode": "^1.102.0"
@@ -98,6 +98,21 @@
         "title": "Refresh Prompts",
         "category": "Copilot Prompt Tracker",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "copilotPromptTracker.toggleAutoCorrelation",
+        "title": "Toggle Auto-Correlation",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.showAutomationStatus",
+        "title": "Show Automation Status",
+        "category": "Copilot Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.showSessionInsights",
+        "title": "Show Session Insights",
+        "category": "Copilot Prompt Tracker"
       }
     ],
     "configuration": {
@@ -132,6 +147,26 @@
           "type": "boolean",
           "default": true,
           "description": "Create private repositories by default (recommended for security)"
+        },
+        "copilotPromptTracker.autoCorrelation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically correlate sessions with Git commits when they occur"
+        },
+        "copilotPromptTracker.enhancedCopilotDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use enhanced heuristics to automatically detect Copilot interactions"
+        },
+        "copilotPromptTracker.commitDetectionSensitivity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium",
+          "description": "Sensitivity level for automatic Copilot interaction detection"
         }
       }
     },
@@ -191,6 +226,18 @@
         {
           "command": "copilotPromptTracker.correlateWithCommit",
           "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.toggleAutoCorrelation",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.showAutomationStatus",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.showSessionInsights",
+          "when": "true"
         }
       ],
       "view/title": [
@@ -219,11 +266,12 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "NODE_ENV=test VSCODE_TEST=true vscode-test"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.9",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.102.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
@@ -232,6 +280,7 @@
     "esbuild": "^0.25.3",
     "eslint": "^9.25.1",
     "npm-run-all": "^4.1.5",
+    "sinon": "^21.0.0",
     "typescript": "^5.8.3"
   },
   "dependencies": {
@@ -239,21 +288,21 @@
     "simple-git": "^3.28.0"
   },
   "repository": {
-        "type": "git",
-        "url": "https://github.com/wcolon/copilot-git-prompt-tracker.git"
-    },
-    "bugs": {
-        "url": "https://github.com/wcolon/copilot-git-prompt-tracker/issues"
-    },
-    "homepage": "https://github.com/wcolon/copilot-git-prompt-tracker#readme",
-    "license": "MIT",
-    "keywords": [
-        "copilot",
-        "git",
-        "prompt",
-        "tracking",
-        "ai",
-        "github",
-        "monitoring"
-    ]
+    "type": "git",
+    "url": "https://github.com/wcolon/copilot-git-prompt-tracker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wcolon/copilot-git-prompt-tracker/issues"
+  },
+  "homepage": "https://github.com/wcolon/copilot-git-prompt-tracker#readme",
+  "license": "MIT",
+  "keywords": [
+    "copilot",
+    "git",
+    "prompt",
+    "tracking",
+    "ai",
+    "github",
+    "monitoring"
+  ]
 }

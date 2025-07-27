@@ -220,4 +220,13 @@ export class CopilotSessionMonitor {
     private generateInteractionId(): string {
         return `interaction-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
+
+    /**
+     * Clean up resources
+     */
+    public dispose(): void {
+        this.currentSession = null;
+        this.sessionHistory = [];
+        console.log('CopilotSessionMonitor: Disposed');
+    }
 }
