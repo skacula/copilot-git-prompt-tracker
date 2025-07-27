@@ -10,6 +10,8 @@ export class GitCommitWatcher implements vscode.Disposable {
     private readonly watchers = new Map<string, vscode.FileSystemWatcher>();
     private readonly projectConfigManager: ProjectConfigurationManager;
     private lastCommitHashes = new Map<string, string>();
+    private _disposed = false;
+    private pendingTimeouts: Set<NodeJS.Timeout> = new Set();
 
     constructor(
         private readonly gitService: GitService,
@@ -96,9 +98,14 @@ export class GitCommitWatcher implements vscode.Disposable {
         }
 
         // Small delay to ensure git operations are complete
-        setTimeout(async () => {
-            await this.checkForNewCommit(workspaceFolder);
+        const timeoutId = setTimeout(async () => {
+            this.pendingTimeouts.delete(timeoutId);
+            if (!this._disposed) {
+                await this.checkForNewCommit(workspaceFolder);
+            }
         }, 1000);
+        
+        this.pendingTimeouts.add(timeoutId);
     }
 
     private async checkForNewCommit(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
@@ -228,9 +235,35 @@ ${commitContext.diff.split('\n').slice(0, 50).join('\n')}${commitContext.diff.sp
     }
 
     public dispose(): void {
-        this.disposables.forEach(disposable => disposable.dispose());
-        this.watchers.forEach(watcher => watcher.dispose());
+        console.log('GitCommitWatcher: Starting disposal...');
+        this._disposed = true;
+        
+        // Clear all pending timeouts
+        this.pendingTimeouts.forEach(timeoutId => {
+            clearTimeout(timeoutId);
+        });
+        this.pendingTimeouts.clear();
+        
+        // Dispose of all resources
+        this.disposables.forEach(disposable => {
+            try {
+                disposable.dispose();
+            } catch (error) {
+                console.error('GitCommitWatcher: Error disposing resource:', error);
+            }
+        });
+        
+        this.watchers.forEach(watcher => {
+            try {
+                watcher.dispose();
+            } catch (error) {
+                console.error('GitCommitWatcher: Error disposing watcher:', error);
+            }
+        });
+        
         this.watchers.clear();
         this.lastCommitHashes.clear();
+        
+        console.log('GitCommitWatcher: Disposal completed');
     }
 }

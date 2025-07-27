@@ -20,6 +20,8 @@ export class GitService {
     private commitListeners: Array<(commitInfo: GitInfo & { changedFiles: string[] }) => void> = [];
     private lastKnownCommitHash: string | null = null;
     private gitWatcher: vscode.FileSystemWatcher | null = null;
+    private _disposed = false;
+    private pendingTimeouts: Set<NodeJS.Timeout> = new Set();
 
     public async initialize(workspaceRoot?: string): Promise<boolean> {
         try {
@@ -287,12 +289,22 @@ export class GitService {
      * Handle when a commit is detected
      */
     private async handleCommitDetected(source: string): Promise<void> {
+        if (this._disposed) {
+            console.log('GitService: Ignoring commit detection - service disposed');
+            return;
+        }
+        
         console.log(`GitService: Commit detected via ${source}`);
         
         // Small delay to ensure commit is fully processed
-        setTimeout(async () => {
-            await this.checkForNewCommits(source);
+        const timeoutId = setTimeout(async () => {
+            this.pendingTimeouts.delete(timeoutId);
+            if (!this._disposed) {
+                await this.checkForNewCommits(source);
+            }
         }, 500);
+        
+        this.pendingTimeouts.add(timeoutId);
     }
 
     /**
@@ -372,13 +384,38 @@ export class GitService {
      * Clean up resources
      */
     public dispose(): void {
-        this.disposables.forEach(d => d.dispose());
+        console.log('GitService: Starting disposal...');
+        this._disposed = true;
+        
+        // Clear all pending timeouts
+        this.pendingTimeouts.forEach(timeoutId => {
+            clearTimeout(timeoutId);
+        });
+        this.pendingTimeouts.clear();
+        
+        // Dispose of all registered disposables
+        this.disposables.forEach(d => {
+            try {
+                d.dispose();
+            } catch (error) {
+                console.error('GitService: Error disposing resource:', error);
+            }
+        });
         this.disposables = [];
         this.commitListeners = [];
         
         if (this.gitWatcher) {
-            this.gitWatcher.dispose();
+            try {
+                this.gitWatcher.dispose();
+            } catch (error) {
+                console.error('GitService: Error disposing git watcher:', error);
+            }
             this.gitWatcher = null;
         }
+        
+        this.git = null;
+        this.gitAPI = null;
+        
+        console.log('GitService: Disposal completed');
     }
 }
