@@ -574,7 +574,7 @@ ${interactionSummary || 'No interactions yet'}`;
             this.statusBarItem.text = `$(copilot) ${interactionCount} ${autoStatus}`;
             
             const effectiveness = Math.round(monitoringStats.automationEffectiveness);
-            this.statusBarItem.tooltip = `Copilot Tracker: ${interactionCount} interactions in current session\n` +
+            this.statusBarItem.tooltip = `AI Prompt Tracker: ${interactionCount} interactions in current session\n` +
                 `Repository: ${config.githubRepo}\n` +
                 `Auto-correlation: ${this.autoCorrelationEnabled ? 'Enabled' : 'Disabled'}\n` +
                 `Automation effectiveness: ${effectiveness}%\n` +
@@ -583,7 +583,7 @@ ${interactionSummary || 'No interactions yet'}`;
                 `Click to view session details`;
         } else {
             this.statusBarItem.text = '$(copilot) Not configured';
-            this.statusBarItem.tooltip = 'Copilot Tracker: Click to configure repository';
+            this.statusBarItem.tooltip = 'AI Prompt Tracker: Click to configure repository';
         }
     }
 
