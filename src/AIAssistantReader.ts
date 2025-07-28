@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-export interface CopilotChatMessage {
+export interface AIChatMessage {
     role: 'user' | 'assistant';
     content: string;
     timestamp: number;
@@ -11,11 +11,11 @@ export interface CopilotChatMessage {
 
 export interface CopilotChatSession {
     id: string;
-    messages: CopilotChatMessage[];
+    messages: AIChatMessage[];
     timestamp: number;
 }
 
-export class CopilotChatReader {
+export class AIAssistantReader {
     private chatHistoryPath: string | null = null;
 
     constructor() {
@@ -36,20 +36,20 @@ export class CopilotChatReader {
 
         for (const possiblePath of possiblePaths) {
             if (fs.existsSync(possiblePath)) {
-                console.log('CopilotChatReader: Found potential chat history path:', possiblePath);
+                console.log('AIAssistantReader: Found potential chat history path:', possiblePath);
                 this.chatHistoryPath = possiblePath;
                 break;
             }
         }
 
         if (!this.chatHistoryPath) {
-            console.log('CopilotChatReader: No chat history path found');
+            console.log('AIAssistantReader: No chat history path found');
         }
     }
 
     public async getRecentChatSessions(limit: number = 5): Promise<CopilotChatSession[]> {
         if (!this.chatHistoryPath) {
-            console.log('CopilotChatReader: No chat history path available');
+            console.log('AIAssistantReader: No chat history path available');
             return [];
         }
 
@@ -129,7 +129,7 @@ export class CopilotChatReader {
             const data = JSON.parse(content);
 
             // Try to extract chat messages from various possible formats
-            let messages: CopilotChatMessage[] = [];
+            let messages: AIChatMessage[] = [];
             let timestamp = Date.now();
 
             // Format 1: Direct array of messages
@@ -162,8 +162,8 @@ export class CopilotChatReader {
         return null;
     }
 
-    private extractMessagesFromArray(array: any[]): CopilotChatMessage[] {
-        const messages: CopilotChatMessage[] = [];
+    private extractMessagesFromArray(array: any[]): AIChatMessage[] {
+        const messages: AIChatMessage[] = [];
 
         for (const item of array) {
             if (typeof item === 'object' && item.content) {

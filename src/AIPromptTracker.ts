@@ -2,21 +2,21 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GitService, GitInfo } from './GitService';
 import { GitHubService, PromptEntry } from './GitHubService';
-import { CopilotChatReader } from './CopilotChatReader';
+import { AIAssistantReader } from './AIAssistantReader';
 import { ContentSanitizer } from './ContentSanitizer';
-import { CopilotSessionMonitor, DevelopmentSession, AIInteraction } from './CopilotSessionMonitor';
-import { CopilotIntegrationService } from './CopilotIntegrationService';
+import { AISessionMonitor, DevelopmentSession, AIInteraction } from './AISessionMonitor';
+import { AIAssistantDetectionService } from './AIAssistantDetectionService';
 import { SmartSessionManager } from './SmartSessionManager';
 import { BackgroundMonitoringService } from './BackgroundMonitoringService';
 
-export class CopilotPromptTracker implements vscode.Disposable {
+export class AIPromptTracker implements vscode.Disposable {
     private readonly context: vscode.ExtensionContext;
     private readonly configManager: ConfigurationManager;
     private readonly gitService: GitService;
     private readonly githubService: GitHubService;
-    private readonly copilotChatReader: CopilotChatReader;
-    private readonly sessionMonitor: CopilotSessionMonitor;
-    private readonly copilotIntegrationService: CopilotIntegrationService;
+    private readonly aiAssistantReader: AIAssistantReader;
+    private readonly sessionMonitor: AISessionMonitor;
+    private readonly aiAssistantDetectionService: AIAssistantDetectionService;
     private readonly smartSessionManager: SmartSessionManager;
     private readonly backgroundMonitoringService: BackgroundMonitoringService;
     private readonly disposables: vscode.Disposable[] = [];
@@ -33,14 +33,14 @@ export class CopilotPromptTracker implements vscode.Disposable {
         this.configManager = configManager;
         this.gitService = gitService;
         this.githubService = githubService;
-        this.copilotChatReader = new CopilotChatReader();
-        this.sessionMonitor = new CopilotSessionMonitor(context.extension.packageJSON.version);
-        this.copilotIntegrationService = new CopilotIntegrationService();
+        this.aiAssistantReader = new AIAssistantReader();
+        this.sessionMonitor = new AISessionMonitor(context.extension.packageJSON.version);
+        this.aiAssistantDetectionService = new AIAssistantDetectionService();
         this.smartSessionManager = new SmartSessionManager(this.sessionMonitor);
         this.backgroundMonitoringService = new BackgroundMonitoringService(
             this.configManager,
             this.gitService,
-            this.copilotIntegrationService,
+            this.aiAssistantDetectionService,
             this.smartSessionManager,
             this.sessionMonitor,
             this.githubService
@@ -80,16 +80,16 @@ export class CopilotPromptTracker implements vscode.Disposable {
     }
 
     private setupAutomatedCopilotMonitoring(): void {
-        console.log('CopilotPromptTracker: Setting up automated Copilot interaction monitoring');
+        console.log('AIPromptTracker: Setting up automated Copilot interaction monitoring');
         
         // Register commands for manual interaction capture (backward compatibility)
         this.registerCopilotCaptureCommands();
         
         // Set up automatic Copilot interaction detection
-        const copilotListener = this.copilotIntegrationService.onInteractionDetected((interaction) => {
+        const copilotListener = this.aiAssistantDetectionService.onInteractionDetected((interaction) => {
             this.sessionMonitor.addInteraction(interaction);
             this.updateStatusBar();
-            console.log(`CopilotPromptTracker: Auto-detected ${interaction.interactionType} interaction`);
+            console.log(`AIPromptTracker: Auto-detected ${interaction.interactionType} interaction`);
         });
         this.disposables.push(copilotListener);
         
@@ -102,7 +102,7 @@ export class CopilotPromptTracker implements vscode.Disposable {
         const captureCommand = vscode.commands.registerCommand(
             'copilotPromptTracker.captureLastCopilotChat',
             async () => {
-                await this.captureLastCopilotInteraction();
+                await this.captureLastAIInteraction();
             }
         );
         this.disposables.push(captureCommand);
@@ -111,7 +111,7 @@ export class CopilotPromptTracker implements vscode.Disposable {
         const recordCommand = vscode.commands.registerCommand(
             'copilotPromptTracker.recordInteraction',
             async () => {
-                await this.recordCopilotInteractionManually();
+                await this.recordAIInteractionManually();
             }
         );
         this.disposables.push(recordCommand);
@@ -188,7 +188,7 @@ export class CopilotPromptTracker implements vscode.Disposable {
     }
 
     private setupAutomatedGitCommitMonitoring(): void {
-        console.log('CopilotPromptTracker: Setting up automated Git commit monitoring');
+        console.log('AIPromptTracker: Setting up automated Git commit monitoring');
         
         // Set up automatic commit detection and correlation
         const commitListener = this.gitService.onCommit(async (commitInfo) => {
@@ -198,13 +198,13 @@ export class CopilotPromptTracker implements vscode.Disposable {
         });
         this.disposables.push(commitListener);
         
-        console.log('CopilotPromptTracker: Automated Git commit monitoring enabled');
+        console.log('AIPromptTracker: Automated Git commit monitoring enabled');
     }
 
     private setupPeriodicMaintenance(): void {
         // Skip periodic maintenance in test environment to prevent extension host issues
         if (this.isTestEnvironment()) {
-            console.log('CopilotPromptTracker: Test environment detected, skipping periodic maintenance');
+            console.log('AIPromptTracker: Test environment detected, skipping periodic maintenance');
             return;
         }
 
@@ -240,22 +240,22 @@ export class CopilotPromptTracker implements vscode.Disposable {
                 };
 
                 this.sessionMonitor.addInteraction(interaction);
-                console.log('CopilotPromptTracker: Detected potential Copilot interaction');
+                console.log('AIPromptTracker: Detected potential Copilot interaction');
             }
         }
     }
 
     private trackEditorContext(editor: vscode.TextEditor): void {
         // Track current file context for future interactions
-        console.log(`CopilotPromptTracker: Tracking context for ${editor.document.fileName}`);
+        console.log(`AIPromptTracker: Tracking context for ${editor.document.fileName}`);
     }
 
-    private async captureLastCopilotInteraction(): Promise<void> {
+    private async captureLastAIInteraction(): Promise<void> {
         try {
             // For backward compatibility, still allow manual input
             const prompt = await vscode.window.showInputBox({
-                prompt: 'Enter your last prompt to Copilot',
-                placeHolder: 'What did you ask Copilot?'
+                prompt: 'Enter your last prompt to AI assistant',
+                placeHolder: 'What did you ask the AI assistant?'
             });
 
             if (!prompt) {
@@ -268,7 +268,7 @@ export class CopilotPromptTracker implements vscode.Disposable {
             });
 
             // Use the CopilotIntegrationService for consistent handling
-            this.copilotIntegrationService.captureManualInteraction(prompt, response);
+            this.aiAssistantDetectionService.captureManualInteraction(prompt, response);
             vscode.window.showInformationMessage('Copilot interaction captured!');
         } catch (error) {
             console.error('Error capturing Copilot interaction:', error);
@@ -276,10 +276,10 @@ export class CopilotPromptTracker implements vscode.Disposable {
         }
     }
 
-    private async recordCopilotInteractionManually(): Promise<void> {
+    private async recordAIInteractionManually(): Promise<void> {
         const prompt = await vscode.window.showInputBox({
-            prompt: 'Enter the prompt you sent to Copilot',
-            placeHolder: 'What did you ask Copilot?'
+            prompt: 'Enter the prompt you sent to AI assistant',
+            placeHolder: 'What did you ask the AI assistant?'
         });
 
         if (!prompt) {
@@ -292,7 +292,7 @@ export class CopilotPromptTracker implements vscode.Disposable {
         });
 
         // Use the CopilotIntegrationService for consistent handling
-        this.copilotIntegrationService.captureManualInteraction(prompt, response);
+        this.aiAssistantDetectionService.captureManualInteraction(prompt, response);
         vscode.window.showInformationMessage('Copilot interaction recorded!');
     }
 
@@ -327,11 +327,11 @@ ${interactionSummary || 'No interactions yet'}`;
      * Handle automatic commit correlation when a commit is detected
      */
     private async handleAutomaticCommitCorrelation(commitInfo: GitInfo & { changedFiles: string[] }): Promise<void> {
-        console.log(`CopilotPromptTracker: Auto-correlating session with commit ${commitInfo.commitHash}`);
+        console.log(`AIPromptTracker: Auto-correlating session with commit ${commitInfo.commitHash}`);
         
         const config = this.configManager.getConfiguration();
         if (!config) {
-            console.log('CopilotPromptTracker: Repository not configured, skipping auto-correlation');
+            console.log('AIPromptTracker: Repository not configured, skipping auto-correlation');
             return;
         }
 
@@ -339,7 +339,7 @@ ${interactionSummary || 'No interactions yet'}`;
             // Check if there are any interactions to correlate
             const currentSession = this.sessionMonitor.getCurrentSession();
             if (!currentSession || currentSession.interactions.length === 0) {
-                console.log('CopilotPromptTracker: No interactions to correlate with commit');
+                console.log('AIPromptTracker: No interactions to correlate with commit');
                 return;
             }
 
@@ -361,11 +361,11 @@ ${interactionSummary || 'No interactions yet'}`;
                 const message = `Auto-saved ${finalizedSession.interactions.length} Copilot interactions for commit ${commitInfo.commitHash.substring(0, 7)}`;
                 vscode.window.showInformationMessage(message);
                 
-                console.log(`CopilotPromptTracker: Successfully auto-correlated session with ${finalizedSession.interactions.length} interactions`);
+                console.log(`AIPromptTracker: Successfully auto-correlated session with ${finalizedSession.interactions.length} interactions`);
             }
 
         } catch (error) {
-            console.error('CopilotPromptTracker: Error in automatic commit correlation:', error);
+            console.error('AIPromptTracker: Error in automatic commit correlation:', error);
             // Don't show error to user for automatic operations, just log
         }
     }
@@ -584,7 +584,7 @@ ${interactions}`;
         vscode.window.showInformationMessage(`Automatic commit correlation ${status}`);
         
         this.updateStatusBar();
-        console.log(`CopilotPromptTracker: Auto-correlation ${status}`);
+        console.log(`AIPromptTracker: Auto-correlation ${status}`);
     }
 
     /**
@@ -653,7 +653,7 @@ ${interactions}`;
     }
 
     public dispose(): void {
-        console.log('CopilotPromptTracker: Starting disposal...');
+        console.log('AIPromptTracker: Starting disposal...');
         
         // Dispose of all registered disposables first
         this.disposables.forEach(d => {
@@ -681,9 +681,9 @@ ${interactions}`;
         }
         
         try {
-            this.copilotIntegrationService.dispose();
+            this.aiAssistantDetectionService.dispose();
         } catch (error) {
-            console.error('Error disposing copilotIntegrationService:', error);
+            console.error('Error disposing aiAssistantDetectionService:', error);
         }
         
         try {
@@ -698,6 +698,6 @@ ${interactions}`;
             console.error('Error disposing githubService:', error);
         }
         
-        console.log('CopilotPromptTracker: Disposal completed');
+        console.log('AIPromptTracker: Disposal completed');
     }
 }

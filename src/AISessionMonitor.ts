@@ -47,7 +47,7 @@ export interface DevelopmentSession {
  * Sessions are defined as periods of activity that culminate in a Git commit
  * Supports GitHub Copilot, Claude Code, Cursor, and other AI coding assistants
  */
-export class CopilotSessionMonitor {
+export class AISessionMonitor {
     private currentSession: DevelopmentSession | null = null;
     private sessionHistory: DevelopmentSession[] = [];
     private readonly SESSION_TIMEOUT_MINUTES = 30;
@@ -73,7 +73,7 @@ export class CopilotSessionMonitor {
             }
         };
         
-        console.log(`CopilotSessionMonitor: Started new session ${this.currentSession.sessionId}`);
+        console.log(`AISessionMonitor: Started new session ${this.currentSession.sessionId}`);
     }
 
     /**
@@ -103,7 +103,7 @@ export class CopilotSessionMonitor {
             this.currentSession!.interactions = this.currentSession!.interactions.slice(-this.MAX_INTERACTIONS_PER_SESSION);
         }
 
-        console.log(`CopilotSessionMonitor: Added ${provider} interaction ${fullInteraction.id} to session ${this.currentSession!.sessionId}`);
+        console.log(`AISessionMonitor: Added ${provider} interaction ${fullInteraction.id} to session ${this.currentSession!.sessionId}`);
     }
 
     /**
@@ -111,7 +111,7 @@ export class CopilotSessionMonitor {
      */
     public finalizeSessionWithCommit(gitInfo: DevelopmentSession['gitInfo']): DevelopmentSession | null {
         if (!this.currentSession || this.currentSession.interactions.length === 0) {
-            console.log('CopilotSessionMonitor: No active session or interactions to finalize');
+            console.log('AISessionMonitor: No active session or interactions to finalize');
             return null;
         }
 
@@ -131,7 +131,7 @@ export class CopilotSessionMonitor {
         const finalizedSession = { ...this.currentSession };
         this.sessionHistory.push(finalizedSession);
         
-        console.log(`CopilotSessionMonitor: Finalized session ${finalizedSession.sessionId} with ${finalizedSession.interactions.length} interactions`);
+        console.log(`AISessionMonitor: Finalized session ${finalizedSession.sessionId} with ${finalizedSession.interactions.length} interactions`);
 
         // Start new session for future interactions
         this.startNewSession();
@@ -202,7 +202,7 @@ export class CopilotSessionMonitor {
     public cleanupOldSessions(maxSessions: number = 100): void {
         if (this.sessionHistory.length > maxSessions) {
             this.sessionHistory = this.sessionHistory.slice(-maxSessions);
-            console.log(`CopilotSessionMonitor: Cleaned up old sessions, keeping ${maxSessions} most recent`);
+            console.log(`AISessionMonitor: Cleaned up old sessions, keeping ${maxSessions} most recent`);
         }
     }
 
@@ -221,7 +221,7 @@ export class CopilotSessionMonitor {
 
         // If no activity for SESSION_TIMEOUT_MINUTES, start fresh session
         if (timeSinceLastInteraction > (this.SESSION_TIMEOUT_MINUTES * 60 * 1000)) {
-            console.log(`CopilotSessionMonitor: Session ${this.currentSession.sessionId} timed out due to inactivity`);
+            console.log(`AISessionMonitor: Session ${this.currentSession.sessionId} timed out due to inactivity`);
             this.startNewSession();
         }
     }
@@ -240,6 +240,6 @@ export class CopilotSessionMonitor {
     public dispose(): void {
         this.currentSession = null;
         this.sessionHistory = [];
-        console.log('CopilotSessionMonitor: Disposed');
+        console.log('AISessionMonitor: Disposed');
     }
 }

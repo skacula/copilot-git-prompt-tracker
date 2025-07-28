@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { AIInteraction } from './CopilotSessionMonitor';
+import { AIInteraction } from './AISessionMonitor';
 
 export interface AIDetectionResult {
     detected: boolean;
@@ -21,7 +21,7 @@ export type CopilotDetectionResult = AIDetectionResult;
  * Uses multiple detection strategies to automatically identify AI usage from various providers
  * Supports GitHub Copilot, Claude Code, Cursor, and other AI coding assistants
  */
-export class CopilotIntegrationService implements vscode.Disposable {
+export class AIAssistantDetectionService implements vscode.Disposable {
     private disposables: vscode.Disposable[] = [];
     private interactionListeners: Array<(interaction: Omit<AIInteraction, 'id' | 'timestamp'>) => void> = [];
     private copilotExtension: vscode.Extension<any> | undefined;
@@ -36,7 +36,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
     }
 
     private async initialize(): Promise<void> {
-        console.log('CopilotIntegrationService: Initializing AI assistant integrations');
+        console.log('AIAssistantDetectionService: Initializing AI assistant integrations');
         
         // Try to get various AI extensions
         await this.initializeAIExtensions();
@@ -77,18 +77,18 @@ export class CopilotIntegrationService implements vscode.Disposable {
 
             if (this.copilotExtension && !this.copilotExtension.isActive) {
                 await this.copilotExtension.activate();
-                console.log('CopilotIntegrationService: Activated Copilot extension');
+                console.log('AIAssistantDetectionService: Activated Copilot extension');
             }
 
             // Try to access Copilot Chat extension for chat interactions
             const copilotChatExtension = vscode.extensions.getExtension('GitHub.copilot-chat');
             if (copilotChatExtension && !copilotChatExtension.isActive) {
                 await copilotChatExtension.activate();
-                console.log('CopilotIntegrationService: Activated Copilot Chat extension');
+                console.log('AIAssistantDetectionService: Activated Copilot Chat extension');
             }
 
         } catch (error) {
-            console.log('CopilotIntegrationService: Copilot extension not available or failed to activate:', error);
+            console.log('AIAssistantDetectionService: Copilot extension not available or failed to activate:', error);
         }
     }
 
@@ -122,11 +122,11 @@ export class CopilotIntegrationService implements vscode.Disposable {
         try {
             // This is experimental - check if chat participant API is available
             if (typeof (vscode as any).chat !== 'undefined' && typeof (vscode as any).chat.createChatParticipant === 'function') {
-                console.log('CopilotIntegrationService: Chat participant API detected');
+                console.log('AIAssistantDetectionService: Chat participant API detected');
                 // We could potentially register our own participant to intercept conversations
             }
         } catch (error) {
-            console.log('CopilotIntegrationService: Chat participant API not available');
+            console.log('AIAssistantDetectionService: Chat participant API not available');
         }
     }
 
@@ -170,10 +170,18 @@ export class CopilotIntegrationService implements vscode.Disposable {
         const documentUri = document.uri.toString();
 
         for (const change of event.contentChanges) {
-            const detectionResult = this.detectCopilotInteraction(change, document);
-            
-            if (detectionResult.detected && detectionResult.confidence > 0.7) {
-                await this.captureInteraction(change, document, detectionResult);
+            // Only analyze substantial text changes
+            if (change.text.length > 10) {
+                console.log(`📝 Analyzing text change: ${change.text.length} chars in ${document.languageId}`);
+                const detectionResults = this.detectAIInteractions(change, document);
+                
+                for (const detectionResult of detectionResults) {
+                    console.log(`🔍 ${detectionResult.aiProvider}: confidence=${Math.round(detectionResult.confidence * 100)}%, detected=${detectionResult.detected}`);
+                    
+                    if (detectionResult.detected && detectionResult.confidence > 0.5) {
+                        await this.captureAIInteraction(change, document, detectionResult);
+                    }
+                }
             }
 
             // Store recent changes for pattern analysis
@@ -182,6 +190,44 @@ export class CopilotIntegrationService implements vscode.Disposable {
                 { change, timestamp: Date.now() }
             );
         }
+    }
+
+    /**
+     * Detect potential AI interactions from multiple providers
+     */
+    private detectAIInteractions(
+        change: vscode.TextDocumentContentChangeEvent,
+        document: vscode.TextDocument
+    ): AIDetectionResult[] {
+        const results: AIDetectionResult[] = [];
+        
+        // Try Copilot detection
+        const copilotResult = this.detectCopilotInteraction(change, document);
+        if (copilotResult.detected) {
+            results.push(copilotResult);
+        }
+        
+        // Try Claude Code detection
+        const claudeResult = this.detectClaudeInteraction(change, document);
+        if (claudeResult.detected) {
+            results.push(claudeResult);
+        }
+        
+        // Try Cursor detection
+        const cursorResult = this.detectCursorInteraction(change, document);
+        if (cursorResult.detected) {
+            results.push(cursorResult);
+        }
+        
+        // Generic AI detection if no specific provider detected
+        if (results.length === 0) {
+            const genericResult = this.detectGenericAI(change, document);
+            if (genericResult.detected) {
+                results.push(genericResult);
+            }
+        }
+        
+        return results;
     }
 
     /**
@@ -279,13 +325,13 @@ export class CopilotIntegrationService implements vscode.Disposable {
                 try {
                     listener(interaction);
                 } catch (error) {
-                    console.error('CopilotIntegrationService: Error in interaction listener:', error);
+                    console.error('AIAssistantDetectionService: Error in interaction listener:', error);
                 }
             });
 
-            console.log(`CopilotIntegrationService: Captured ${detection.interactionType} interaction with confidence ${detection.confidence}`);
+            console.log(`AIAssistantDetectionService: Captured ${detection.interactionType} interaction with confidence ${detection.confidence}`);
         } catch (error) {
-            console.error('CopilotIntegrationService: Error capturing interaction:', error);
+            console.error('AIAssistantDetectionService: Error capturing interaction:', error);
         }
     }
 
@@ -417,7 +463,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
      */
     private trackEditorForInlineCompletions(editor: vscode.TextEditor): void {
         // Monitor this editor for potential inline completion acceptance
-        console.log(`CopilotIntegrationService: Monitoring editor ${editor.document.fileName} for inline completions`);
+        console.log(`AIAssistantDetectionService: Monitoring editor ${editor.document.fileName} for inline completions`);
     }
 
     /**
@@ -430,7 +476,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
                 const selectedText = event.textEditor.document.getText(selection);
                 if (selectedText.length > 50) {
                     // Potential Copilot suggestion selection
-                    console.log('CopilotIntegrationService: Large selection detected, potential Copilot interaction');
+                    console.log('AIAssistantDetectionService: Large selection detected, potential Copilot interaction');
                 }
             }
         }
@@ -440,7 +486,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
      * Track editor context for better interaction detection
      */
     private trackEditorContext(editor: vscode.TextEditor): void {
-        console.log(`CopilotIntegrationService: Tracking editor context for ${editor.document.fileName}`);
+        console.log(`AIAssistantDetectionService: Tracking editor context for ${editor.document.fileName}`);
     }
 
     private isTestEnvironment(): boolean {
@@ -456,7 +502,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
     private setupCleanupTimer(): void {
         // Skip cleanup timer in test environment to prevent extension host issues
         if (this.isTestEnvironment()) {
-            console.log('CopilotIntegrationService: Test environment detected, skipping cleanup timer');
+            console.log('AIAssistantDetectionService: Test environment detected, skipping cleanup timer');
             return;
         }
 
@@ -540,7 +586,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
             try {
                 listener(interaction);
             } catch (error) {
-                console.error('CopilotIntegrationService: Error in manual interaction listener:', error);
+                console.error('AIAssistantDetectionService: Error in manual interaction listener:', error);
             }
         });
     }
@@ -556,15 +602,15 @@ export class CopilotIntegrationService implements vscode.Disposable {
                                    vscode.extensions.getExtension('claude.code');
             
             if (this.claudeExtension) {
-                console.log('CopilotIntegrationService: Claude Code extension detected');
+                console.log('AIAssistantDetectionService: Claude Code extension detected');
                 if (!this.claudeExtension.isActive) {
                     await this.claudeExtension.activate();
                 }
             } else {
-                console.log('CopilotIntegrationService: Claude Code extension not found');
+                console.log('AIAssistantDetectionService: Claude Code extension not found');
             }
         } catch (error) {
-            console.error('CopilotIntegrationService: Error initializing Claude extension:', error);
+            console.error('AIAssistantDetectionService: Error initializing Claude extension:', error);
         }
     }
 
@@ -578,15 +624,15 @@ export class CopilotIntegrationService implements vscode.Disposable {
                                    vscode.extensions.getExtension('anysphere.cursor');
             
             if (this.cursorExtension) {
-                console.log('CopilotIntegrationService: Cursor extension detected');
+                console.log('AIAssistantDetectionService: Cursor extension detected');
                 if (!this.cursorExtension.isActive) {
                     await this.cursorExtension.activate();
                 }
             } else {
-                console.log('CopilotIntegrationService: Cursor extension not found');
+                console.log('AIAssistantDetectionService: Cursor extension not found');
             }
         } catch (error) {
-            console.error('CopilotIntegrationService: Error initializing Cursor extension:', error);
+            console.error('AIAssistantDetectionService: Error initializing Cursor extension:', error);
         }
     }
 
@@ -594,7 +640,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
      * Set up Claude Code specific detection patterns
      */
     private setupClaudeCodeDetection(): void {
-        console.log('CopilotIntegrationService: Setting up Claude Code detection');
+        console.log('AIAssistantDetectionService: Setting up Claude Code detection');
         
         // Monitor for large text insertions that might be Claude-generated
         // Claude Code often inserts substantial blocks of code at once
@@ -605,7 +651,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
      * Set up Cursor specific detection patterns
      */
     private setupCursorDetection(): void {
-        console.log('CopilotIntegrationService: Setting up Cursor detection');
+        console.log('AIAssistantDetectionService: Setting up Cursor detection');
         
         // Monitor for Cursor-specific patterns in text changes
         // Cursor has different insertion patterns than Copilot
@@ -641,7 +687,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
             try {
                 listener(interaction);
             } catch (error) {
-                console.error('CopilotIntegrationService: Error in Claude interaction listener:', error);
+                console.error('AIAssistantDetectionService: Error in Claude interaction listener:', error);
             }
         });
     }
@@ -675,9 +721,244 @@ export class CopilotIntegrationService implements vscode.Disposable {
             try {
                 listener(interaction);
             } catch (error) {
-                console.error('CopilotIntegrationService: Error in Cursor interaction listener:', error);
+                console.error('AIAssistantDetectionService: Error in Cursor interaction listener:', error);
             }
         });
+    }
+
+    /**
+     * Detect Claude Code interactions based on patterns typical of Claude
+     */
+    private detectClaudeInteraction(
+        change: vscode.TextDocumentContentChangeEvent,
+        document: vscode.TextDocument
+    ): AIDetectionResult {
+        let confidence = 0;
+        let interactionType: 'chat' | 'inline' | 'comment' | 'completion' | 'generation' = 'generation';
+
+        // Claude Code typically generates substantial blocks of code
+        if (change.text.length > 50 && change.rangeLength === 0) {
+            confidence += 0.3;
+            
+            // Extra confidence for very large blocks typical of Claude
+            if (change.text.length > 200) {
+                confidence += 0.2;
+            }
+        }
+
+        // Claude often includes thoughtful comments
+        if (this.hasThoughtfulComments(change.text, document.languageId)) {
+            confidence += 0.3;
+            interactionType = 'comment';
+        }
+
+        // Claude tends to generate complete functions/methods
+        if (this.isCompleteFunction(change.text, document.languageId)) {
+            confidence += 0.3;
+        }
+
+        // Check for Claude Code extension presence
+        if (this.claudeExtension && this.claudeExtension.isActive) {
+            confidence += 0.2;
+        }
+
+        // Claude often generates multi-line explanatory text
+        if (change.text.includes('\n') && change.text.split('\n').length > 5) {
+            confidence += 0.2;
+        }
+
+        // Lower threshold for Claude detection since it has distinct patterns
+        const detected = confidence > 0.4;
+        
+        if (detected) {
+            console.log(`🧠 Claude pattern detected: length=${change.text.length}, confidence=${Math.round(confidence * 100)}%`);
+        }
+
+        return {
+            detected,
+            confidence,
+            aiProvider: 'claude',
+            interactionType,
+            context: {
+                fileUri: document.uri,
+                language: document.languageId,
+                range: change.range
+            }
+        };
+    }
+
+    /**
+     * Detect Cursor interactions
+     */
+    private detectCursorInteraction(
+        change: vscode.TextDocumentContentChangeEvent,
+        document: vscode.TextDocument
+    ): AIDetectionResult {
+        let confidence = 0;
+        let interactionType: 'chat' | 'inline' | 'comment' | 'completion' | 'generation' = 'completion';
+
+        // Cursor has different patterns than Copilot
+        if (change.text.length > 20 && change.rangeLength === 0) {
+            confidence += 0.3;
+        }
+
+        // Check for Cursor extension presence
+        if (this.cursorExtension && this.cursorExtension.isActive) {
+            confidence += 0.4;
+        }
+
+        // Cursor-specific code patterns
+        if (this.isCursorLikeCode(change.text, document.languageId)) {
+            confidence += 0.2;
+        }
+
+        return {
+            detected: confidence > 0.4,
+            confidence,
+            aiProvider: 'cursor',
+            interactionType,
+            context: {
+                fileUri: document.uri,
+                language: document.languageId,
+                range: change.range
+            }
+        };
+    }
+
+    /**
+     * Generic AI detection for unknown providers
+     */
+    private detectGenericAI(
+        change: vscode.TextDocumentContentChangeEvent,
+        document: vscode.TextDocument
+    ): AIDetectionResult {
+        let confidence = 0;
+        let interactionType: 'chat' | 'inline' | 'comment' | 'completion' | 'generation' = 'generation';
+
+        // Look for AI-like patterns
+        if (change.text.length > 50 && change.rangeLength === 0) {
+            confidence += 0.3;
+        }
+
+        // Instant large text insertion
+        const documentUri = document.uri.toString();
+        const typingSpeed = this.getRecentTypingSpeed(documentUri);
+        if (typingSpeed === 0 && change.text.length > 20) {
+            confidence += 0.3;
+        }
+
+        // Well-structured code patterns
+        if (this.isStructuredCode(change.text, document.languageId)) {
+            confidence += 0.2;
+        }
+
+        return {
+            detected: confidence > 0.4,
+            confidence,
+            aiProvider: 'other',
+            interactionType,
+            context: {
+                fileUri: document.uri,
+                language: document.languageId,
+                range: change.range
+            }
+        };
+    }
+
+    /**
+     * Check if text contains thoughtful comments typical of Claude
+     */
+    private hasThoughtfulComments(text: string, language: string): boolean {
+        const commentPatterns = {
+            'typescript': /\/\/\s*[A-Z][^\/]*(?:implementation|approach|strategy|explanation)/i,
+            'javascript': /\/\/\s*[A-Z][^\/]*(?:implementation|approach|strategy|explanation)/i,
+            'python': /#\s*[A-Z][^#]*(?:implementation|approach|strategy|explanation)/i,
+            'java': /\/\/\s*[A-Z][^\/]*(?:implementation|approach|strategy|explanation)/i
+        };
+        
+        const pattern = commentPatterns[language as keyof typeof commentPatterns];
+        return pattern ? pattern.test(text) : false;
+    }
+
+    /**
+     * Check if text represents a complete function
+     */
+    private isCompleteFunction(text: string, language: string): boolean {
+        const functionPatterns = {
+            'typescript': /(?:function\s+\w+|const\s+\w+\s*=|class\s+\w+)[\s\S]*\{[\s\S]*\}/,
+            'javascript': /(?:function\s+\w+|const\s+\w+\s*=|class\s+\w+)[\s\S]*\{[\s\S]*\}/,
+            'python': /def\s+\w+\([\s\S]*?\):[\s\S]+/,
+            'java': /(?:public|private|protected)?\s*(?:static)?\s*\w+\s+\w+\s*\([^)]*\)\s*\{[\s\S]*\}/
+        };
+        
+        const pattern = functionPatterns[language as keyof typeof functionPatterns];
+        return pattern ? pattern.test(text) : text.includes('{') && text.includes('}');
+    }
+
+    /**
+     * Check for Cursor-specific code patterns
+     */
+    private isCursorLikeCode(text: string, language: string): boolean {
+        // Cursor often generates more concise, focused code snippets
+        return text.length < 200 && text.split('\n').length <= 10 && this.isCodeLikeContent(text, language);
+    }
+
+    /**
+     * Check if text is well-structured code
+     */
+    private isStructuredCode(text: string, language: string): boolean {
+        const lines = text.split('\n');
+        const indentedLines = lines.filter(line => line.match(/^\s+/));
+        return indentedLines.length > lines.length * 0.3; // 30% of lines are indented
+    }
+
+    /**
+     * Update captureInteraction to handle AI interactions
+     */
+    private async captureAIInteraction(
+        change: vscode.TextDocumentContentChangeEvent,
+        document: vscode.TextDocument,
+        detection: AIDetectionResult
+    ): Promise<void> {
+        try {
+            // Try to infer the prompt context from surrounding code
+            const prompt = await this.inferPromptFromContext(change, document);
+            
+            const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
+                prompt,
+                response: change.text,
+                aiProvider: detection.aiProvider,
+                fileContext: {
+                    fileName: document.fileName,
+                    language: document.languageId,
+                    selection: change.range ? {
+                        start: { 
+                            line: change.range.start.line, 
+                            character: change.range.start.character 
+                        },
+                        end: { 
+                            line: change.range.end.line, 
+                            character: change.range.end.character 
+                        }
+                    } : undefined,
+                    content: change.text
+                },
+                interactionType: detection.interactionType
+            };
+
+            // Notify listeners
+            this.interactionListeners.forEach(listener => {
+                try {
+                    listener(interaction);
+                } catch (error) {
+                    console.error('AIAssistantDetectionService: Error in interaction listener:', error);
+                }
+            });
+
+            console.log(`🤖 AI DETECTED: ${detection.aiProvider.toUpperCase()} interaction with confidence ${Math.round(detection.confidence * 100)}% (${detection.interactionType})`);
+        } catch (error) {
+            console.error('AIAssistantDetectionService: Error capturing AI interaction:', error);
+        }
     }
 
     public dispose(): void {

@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GitService, GitInfo } from './GitService';
-import { CopilotIntegrationService } from './CopilotIntegrationService';
+import { AIAssistantDetectionService } from './AIAssistantDetectionService';
 import { SmartSessionManager, SessionInsights } from './SmartSessionManager';
-import { CopilotSessionMonitor, DevelopmentSession, CopilotInteraction } from './CopilotSessionMonitor';
+import { AISessionMonitor, DevelopmentSession, AIInteraction } from './AISessionMonitor';
 import { GitHubService } from './GitHubService';
 import { ContentSanitizer } from './ContentSanitizer';
 
@@ -41,17 +41,17 @@ export class BackgroundMonitoringService implements vscode.Disposable {
     // Services
     private readonly configManager: ConfigurationManager;
     private readonly gitService: GitService;
-    private readonly copilotIntegrationService: CopilotIntegrationService;
+    private readonly copilotIntegrationService: AIAssistantDetectionService;
     private readonly smartSessionManager: SmartSessionManager;
-    private readonly sessionMonitor: CopilotSessionMonitor;
+    private readonly sessionMonitor: AISessionMonitor;
     private readonly githubService: GitHubService;
 
     constructor(
         configManager: ConfigurationManager,
         gitService: GitService,
-        copilotIntegrationService: CopilotIntegrationService,
+        copilotIntegrationService: AIAssistantDetectionService,
         smartSessionManager: SmartSessionManager,
-        sessionMonitor: CopilotSessionMonitor,
+        sessionMonitor: AISessionMonitor,
         githubService: GitHubService
     ) {
         this.configManager = configManager;
@@ -221,7 +221,7 @@ export class BackgroundMonitoringService implements vscode.Disposable {
         console.log('BackgroundMonitoringService: Starting comprehensive monitoring');
 
         // Monitor Copilot interactions
-        this.setupCopilotInteractionMonitoring();
+        this.setupAIInteractionMonitoring();
         
         // Monitor Git commits
         this.setupGitCommitMonitoring();
@@ -236,7 +236,7 @@ export class BackgroundMonitoringService implements vscode.Disposable {
     /**
      * Set up Copilot interaction monitoring with background processing
      */
-    private setupCopilotInteractionMonitoring(): void {
+    private setupAIInteractionMonitoring(): void {
         const interactionListener = this.copilotIntegrationService.onInteractionDetected((interaction) => {
             this.stats.interactionsDetected++;
             
@@ -320,7 +320,7 @@ export class BackgroundMonitoringService implements vscode.Disposable {
     /**
      * Process Copilot interaction in background
      */
-    private async processInteractionInBackground(interaction: Omit<CopilotInteraction, 'id' | 'timestamp'>): Promise<void> {
+    private async processInteractionInBackground(interaction: Omit<AIInteraction, 'id' | 'timestamp'>): Promise<void> {
         try {
             // Sanitize content for security
             const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

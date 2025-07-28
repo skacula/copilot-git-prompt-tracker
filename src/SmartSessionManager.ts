@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CopilotSessionMonitor, DevelopmentSession } from './CopilotSessionMonitor';
+import { AISessionMonitor, DevelopmentSession } from './AISessionMonitor';
 
 export interface ActivityPattern {
     fileActivity: Map<string, number>; // file -> last activity timestamp
@@ -23,7 +23,7 @@ export interface SessionInsights {
  */
 export class SmartSessionManager implements vscode.Disposable {
     private disposables: vscode.Disposable[] = [];
-    private sessionMonitor: CopilotSessionMonitor;
+    private sessionMonitor: AISessionMonitor;
     private activityPattern: ActivityPattern;
     private sessionInsights: Map<string, SessionInsights> = new Map();
     private idleTimeoutHandle: NodeJS.Timeout | null = null;
@@ -34,7 +34,7 @@ export class SmartSessionManager implements vscode.Disposable {
     private readonly CONTEXT_SWITCH_PENALTY = 5; // minutes
     private readonly MIN_SESSION_INTERACTIONS = 3;
 
-    constructor(sessionMonitor: CopilotSessionMonitor) {
+    constructor(sessionMonitor: AISessionMonitor) {
         this.sessionMonitor = sessionMonitor;
         this.activityPattern = this.initializeActivityPattern();
         this.setupActivityMonitoring();

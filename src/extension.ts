@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import { CopilotPromptTracker } from './CopilotPromptTracker';
+import { AIPromptTracker } from './AIPromptTracker';
 import { GitHubService } from './GitHubService';
 import { GitService } from './GitService';
 import { ConfigurationManager } from './ConfigurationManager';
 import { PromptViewProvider } from './PromptViewProvider';
 
-let promptTracker: CopilotPromptTracker;
+let promptTracker: AIPromptTracker;
 let promptViewProvider: PromptViewProvider;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	// Initialize the prompt tracker with session monitoring
-	promptTracker = new CopilotPromptTracker(
+	promptTracker = new AIPromptTracker(
 		context,
 		configManager,
 		gitService,
@@ -51,10 +51,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Initialize the tracker
 	promptTracker.initialize().then(() => {
-		console.log('CopilotPromptTracker initialized successfully');
+		console.log('AIPromptTracker initialized successfully');
 	}).catch((error) => {
-		console.error('Failed to initialize CopilotPromptTracker:', error);
-		vscode.window.showErrorMessage('Failed to initialize Copilot Prompt Tracker');
+		console.error('Failed to initialize AIPromptTracker:', error);
+		vscode.window.showErrorMessage('Failed to initialize AI Prompt Tracker');
 	});
 
 	// Add tracker to disposables
