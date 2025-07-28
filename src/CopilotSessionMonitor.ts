@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 
-export interface CopilotInteraction {
+export interface AIInteraction {
     id: string;
     timestamp: string;
     prompt: string;
     response?: string;
+    aiProvider: 'copilot' | 'claude' | 'cursor' | 'other';
     fileContext?: {
         fileName: string;
         language: string;
@@ -14,14 +15,17 @@ export interface CopilotInteraction {
         };
         content?: string;
     };
-    interactionType: 'chat' | 'inline' | 'comment';
+    interactionType: 'chat' | 'inline' | 'comment' | 'completion' | 'generation';
 }
+
+// Backward compatibility alias
+export type CopilotInteraction = AIInteraction;
 
 export interface DevelopmentSession {
     sessionId: string;
     startTime: string;
     endTime?: string;
-    interactions: CopilotInteraction[];
+    interactions: AIInteraction[];
     gitInfo?: {
         commitHash: string;
         branch: string;
@@ -34,12 +38,14 @@ export interface DevelopmentSession {
         vscodeVersion: string;
         extensionVersion: string;
         workspaceFolder: string;
+        aiProvidersUsed: string[]; // Track which AI assistants were used
     };
 }
 
 /**
- * Monitors Copilot interactions and correlates them with development sessions
+ * Monitors AI assistant interactions and correlates them with development sessions
  * Sessions are defined as periods of activity that culminate in a Git commit
+ * Supports GitHub Copilot, Claude Code, Cursor, and other AI coding assistants
  */
 export class CopilotSessionMonitor {
     private currentSession: DevelopmentSession | null = null;
@@ -62,7 +68,8 @@ export class CopilotSessionMonitor {
             metadata: {
                 vscodeVersion: vscode.version,
                 extensionVersion: this.extensionVersion,
-                workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'unknown'
+                workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || 'unknown',
+                aiProvidersUsed: []
             }
         };
         
@@ -70,14 +77,14 @@ export class CopilotSessionMonitor {
     }
 
     /**
-     * Add a Copilot interaction to the current session
+     * Add an AI assistant interaction to the current session
      */
-    public addInteraction(interaction: Omit<CopilotInteraction, 'id' | 'timestamp'>): void {
+    public addInteraction(interaction: Omit<AIInteraction, 'id' | 'timestamp'>): void {
         if (!this.currentSession) {
             this.startNewSession();
         }
 
-        const fullInteraction: CopilotInteraction = {
+        const fullInteraction: AIInteraction = {
             id: this.generateInteractionId(),
             timestamp: new Date().toISOString(),
             ...interaction
@@ -85,12 +92,18 @@ export class CopilotSessionMonitor {
 
         this.currentSession!.interactions.push(fullInteraction);
         
+        // Track AI providers used in this session
+        const provider = interaction.aiProvider || 'other';
+        if (!this.currentSession!.metadata.aiProvidersUsed.includes(provider)) {
+            this.currentSession!.metadata.aiProvidersUsed.push(provider);
+        }
+        
         // Prevent session from growing too large
         if (this.currentSession!.interactions.length > this.MAX_INTERACTIONS_PER_SESSION) {
             this.currentSession!.interactions = this.currentSession!.interactions.slice(-this.MAX_INTERACTIONS_PER_SESSION);
         }
 
-        console.log(`CopilotSessionMonitor: Added interaction ${fullInteraction.id} to session ${this.currentSession!.sessionId}`);
+        console.log(`CopilotSessionMonitor: Added ${provider} interaction ${fullInteraction.id} to session ${this.currentSession!.sessionId}`);
     }
 
     /**

@@ -1,8 +1,8 @@
 {
   "name": "copilot-git-prompt-tracker",
-  "displayName": "Copilot Git Prompt Tracker",
-  "description": "Track and save Copilot prompts to GitHub repository for commit history association",
-  "version": "0.0.4",
+  "displayName": "AI Git Prompt Tracker",
+  "description": "Track and save AI assistant prompts (Copilot, Claude Code, Cursor) to GitHub repository for commit history association",
+  "version": "0.1.0",
   "publisher": "your-publisher-name",
   "engines": {
     "vscode": "^1.102.0"
@@ -20,99 +20,99 @@
       {
         "command": "copilotPromptTracker.configure",
         "title": "Configure GitHub Repository",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.savePrompt",
         "title": "Save Current Prompt",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.savePromptFromTemplate",
         "title": "Save Prompt from Template",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.viewHistory",
         "title": "View Prompt History",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.viewProjectPrompts",
         "title": "View Project Prompts",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.toggle",
         "title": "Toggle Prompt Tracking",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.initializeProject",
         "title": "Initialize Project Configuration",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.testConfiguration",
         "title": "Test Project Configuration",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.testAuth",
         "title": "Test GitHub Authentication",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.captureLastCopilotChat",
         "title": "Capture Last Copilot Chat",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.showSession",
         "title": "Show Current Session",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.recordInteraction",
         "title": "Record Interaction",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.correlateWithCommit",
         "title": "Correlate with Commit",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.signOut",
         "title": "Sign Out from GitHub",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.openView",
         "title": "Open Prompts View",
-        "category": "Copilot Prompt Tracker",
+        "category": "AI Prompt Tracker",
         "icon": "$(list-tree)"
       },
       {
         "command": "copilotPromptTracker.refreshView",
         "title": "Refresh Prompts",
-        "category": "Copilot Prompt Tracker",
+        "category": "AI Prompt Tracker",
         "icon": "$(refresh)"
       },
       {
         "command": "copilotPromptTracker.toggleAutoCorrelation",
         "title": "Toggle Auto-Correlation",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.showAutomationStatus",
         "title": "Show Automation Status",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       },
       {
         "command": "copilotPromptTracker.showSessionInsights",
         "title": "Show Session Insights",
-        "category": "Copilot Prompt Tracker"
+        "category": "AI Prompt Tracker"
       }
     ],
     "configuration": {
@@ -121,17 +121,17 @@
         "copilotPromptTracker.githubRepo": {
           "type": "string",
           "default": "",
-          "description": "GitHub repository in format 'owner/repo' where prompts will be saved"
+          "description": "GitHub repository in format 'owner/repo' where AI assistant prompts will be saved"
         },
         "copilotPromptTracker.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable automatic prompt tracking"
+          "description": "Enable automatic AI assistant prompt tracking"
         },
         "copilotPromptTracker.autoSave": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically save prompts after each Copilot interaction"
+          "description": "Automatically save prompts after each AI assistant interaction"
         },
         "copilotPromptTracker.saveLocation": {
           "type": "string",

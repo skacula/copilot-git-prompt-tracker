@@ -4,7 +4,7 @@ import { GitService, GitInfo } from './GitService';
 import { GitHubService, PromptEntry } from './GitHubService';
 import { CopilotChatReader } from './CopilotChatReader';
 import { ContentSanitizer } from './ContentSanitizer';
-import { CopilotSessionMonitor, DevelopmentSession, CopilotInteraction } from './CopilotSessionMonitor';
+import { CopilotSessionMonitor, DevelopmentSession, AIInteraction } from './CopilotSessionMonitor';
 import { CopilotIntegrationService } from './CopilotIntegrationService';
 import { SmartSessionManager } from './SmartSessionManager';
 import { BackgroundMonitoringService } from './BackgroundMonitoringService';
@@ -223,9 +223,10 @@ export class CopilotPromptTracker implements vscode.Disposable {
         // Look for patterns that might indicate Copilot suggestions
         for (const change of event.contentChanges) {
             if (change.text.length > 50) { // Significant additions might be Copilot
-                const interaction: Omit<CopilotInteraction, 'id' | 'timestamp'> = {
+                const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
                     prompt: `Code generation in ${event.document.fileName}`,
                     response: change.text,
+                    aiProvider: 'other',
                     fileContext: {
                         fileName: event.document.fileName,
                         language: event.document.languageId,

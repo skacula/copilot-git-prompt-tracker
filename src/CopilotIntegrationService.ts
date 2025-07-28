@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
-import { CopilotInteraction } from './CopilotSessionMonitor';
+import { AIInteraction } from './CopilotSessionMonitor';
 
-export interface CopilotDetectionResult {
+export interface AIDetectionResult {
     detected: boolean;
     confidence: number;
-    interactionType: 'chat' | 'inline' | 'comment';
+    aiProvider: 'copilot' | 'claude' | 'cursor' | 'other';
+    interactionType: 'chat' | 'inline' | 'comment' | 'completion' | 'generation';
     context?: {
         fileUri: vscode.Uri;
         language: string;
@@ -12,14 +13,20 @@ export interface CopilotDetectionResult {
     };
 }
 
+// Backward compatibility alias
+export type CopilotDetectionResult = AIDetectionResult;
+
 /**
- * Enhanced service for detecting and capturing Copilot interactions
- * Uses multiple detection strategies to automatically identify Copilot usage
+ * Enhanced service for detecting and capturing AI assistant interactions
+ * Uses multiple detection strategies to automatically identify AI usage from various providers
+ * Supports GitHub Copilot, Claude Code, Cursor, and other AI coding assistants
  */
 export class CopilotIntegrationService implements vscode.Disposable {
     private disposables: vscode.Disposable[] = [];
-    private interactionListeners: Array<(interaction: Omit<CopilotInteraction, 'id' | 'timestamp'>) => void> = [];
+    private interactionListeners: Array<(interaction: Omit<AIInteraction, 'id' | 'timestamp'>) => void> = [];
     private copilotExtension: vscode.Extension<any> | undefined;
+    private claudeExtension: vscode.Extension<any> | undefined;
+    private cursorExtension: vscode.Extension<any> | undefined;
     private recentTextChanges: Map<string, { change: vscode.TextDocumentContentChangeEvent; timestamp: number }> = new Map();
     private userTypingPatterns: Map<string, number[]> = new Map(); // Track typing speed patterns
     private chatParticipantAPI: any;
@@ -29,19 +36,30 @@ export class CopilotIntegrationService implements vscode.Disposable {
     }
 
     private async initialize(): Promise<void> {
-        console.log('CopilotIntegrationService: Initializing Copilot integration');
+        console.log('CopilotIntegrationService: Initializing AI assistant integrations');
         
-        // Try to get Copilot extension
-        await this.initializeCopilotExtension();
+        // Try to get various AI extensions
+        await this.initializeAIExtensions();
         
         // Set up various detection methods
         this.setupTextChangeDetection();
         this.setupChatParticipantIntegration();
         this.setupCompletionProviderMonitoring();
         this.setupEditorActivityMonitoring();
+        this.setupClaudeCodeDetection();
+        this.setupCursorDetection();
         
         // Clean up old tracking data periodically
         this.setupCleanupTimer();
+    }
+
+    /**
+     * Initialize integration with various AI extensions
+     */
+    private async initializeAIExtensions(): Promise<void> {
+        await this.initializeCopilotExtension();
+        await this.initializeClaudeExtension();
+        await this.initializeCursorExtension();
     }
 
     /**
@@ -212,6 +230,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
         return {
             detected: confidence > 0.4,
             confidence,
+            aiProvider: 'copilot',
             interactionType,
             context: {
                 fileUri: document.uri,
@@ -233,9 +252,10 @@ export class CopilotIntegrationService implements vscode.Disposable {
             // Try to infer the prompt context from surrounding code
             const prompt = await this.inferPromptFromContext(change, document);
             
-            const interaction: Omit<CopilotInteraction, 'id' | 'timestamp'> = {
+            const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
                 prompt,
                 response: change.text,
+                aiProvider: 'copilot',
                 fileContext: {
                     fileName: document.fileName,
                     language: document.languageId,
@@ -477,7 +497,7 @@ export class CopilotIntegrationService implements vscode.Disposable {
     /**
      * Register a listener for detected Copilot interactions
      */
-    public onInteractionDetected(listener: (interaction: Omit<CopilotInteraction, 'id' | 'timestamp'>) => void): vscode.Disposable {
+    public onInteractionDetected(listener: (interaction: Omit<AIInteraction, 'id' | 'timestamp'>) => void): vscode.Disposable {
         this.interactionListeners.push(listener);
         
         return {
@@ -495,9 +515,10 @@ export class CopilotIntegrationService implements vscode.Disposable {
      */
     public async captureManualInteraction(prompt: string, response?: string): Promise<void> {
         const activeEditor = vscode.window.activeTextEditor;
-        const interaction: Omit<CopilotInteraction, 'id' | 'timestamp'> = {
+        const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
             prompt,
             response,
+            aiProvider: 'other',
             fileContext: activeEditor ? {
                 fileName: activeEditor.document.fileName,
                 language: activeEditor.document.languageId,
@@ -520,6 +541,141 @@ export class CopilotIntegrationService implements vscode.Disposable {
                 listener(interaction);
             } catch (error) {
                 console.error('CopilotIntegrationService: Error in manual interaction listener:', error);
+            }
+        });
+    }
+
+    /**
+     * Initialize integration with Claude Code extension
+     */
+    private async initializeClaudeExtension(): Promise<void> {
+        try {
+            // Check for Claude Code extension (you may need to adjust the exact ID)
+            this.claudeExtension = vscode.extensions.getExtension('anthropic.claude-code') ||
+                                   vscode.extensions.getExtension('anthropic.claude') ||
+                                   vscode.extensions.getExtension('claude.code');
+            
+            if (this.claudeExtension) {
+                console.log('CopilotIntegrationService: Claude Code extension detected');
+                if (!this.claudeExtension.isActive) {
+                    await this.claudeExtension.activate();
+                }
+            } else {
+                console.log('CopilotIntegrationService: Claude Code extension not found');
+            }
+        } catch (error) {
+            console.error('CopilotIntegrationService: Error initializing Claude extension:', error);
+        }
+    }
+
+    /**
+     * Initialize integration with Cursor extension
+     */
+    private async initializeCursorExtension(): Promise<void> {
+        try {
+            // Check for Cursor-related extensions
+            this.cursorExtension = vscode.extensions.getExtension('cursor.cursor') ||
+                                   vscode.extensions.getExtension('anysphere.cursor');
+            
+            if (this.cursorExtension) {
+                console.log('CopilotIntegrationService: Cursor extension detected');
+                if (!this.cursorExtension.isActive) {
+                    await this.cursorExtension.activate();
+                }
+            } else {
+                console.log('CopilotIntegrationService: Cursor extension not found');
+            }
+        } catch (error) {
+            console.error('CopilotIntegrationService: Error initializing Cursor extension:', error);
+        }
+    }
+
+    /**
+     * Set up Claude Code specific detection patterns
+     */
+    private setupClaudeCodeDetection(): void {
+        console.log('CopilotIntegrationService: Setting up Claude Code detection');
+        
+        // Monitor for large text insertions that might be Claude-generated
+        // Claude Code often inserts substantial blocks of code at once
+        // We'll enhance the text change detection to identify Claude patterns
+    }
+
+    /**
+     * Set up Cursor specific detection patterns
+     */
+    private setupCursorDetection(): void {
+        console.log('CopilotIntegrationService: Setting up Cursor detection');
+        
+        // Monitor for Cursor-specific patterns in text changes
+        // Cursor has different insertion patterns than Copilot
+        // We'll enhance the text change detection to identify Cursor patterns
+    }
+
+    /**
+     * Handle detected Claude Code interaction
+     */
+    private handleClaudeInteraction(command: { command: string; arguments?: any[] }): void {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+
+        const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
+            prompt: `Claude command: ${command.command}`,
+            response: 'Claude Code interaction detected',
+            aiProvider: 'claude',
+            fileContext: {
+                fileName: editor.document.fileName,
+                language: editor.document.languageId,
+                selection: editor.selection ? {
+                    start: { line: editor.selection.start.line, character: editor.selection.start.character },
+                    end: { line: editor.selection.end.line, character: editor.selection.end.character }
+                } : undefined,
+                content: editor.selection ? editor.document.getText(editor.selection) : undefined
+            },
+            interactionType: 'generation'
+        };
+
+        this.interactionListeners.forEach(listener => {
+            try {
+                listener(interaction);
+            } catch (error) {
+                console.error('CopilotIntegrationService: Error in Claude interaction listener:', error);
+            }
+        });
+    }
+
+    /**
+     * Handle detected Cursor interaction
+     */
+    private handleCursorInteraction(command: { command: string; arguments?: any[] }): void {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+
+        const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
+            prompt: `Cursor command: ${command.command}`,
+            response: 'Cursor interaction detected',
+            aiProvider: 'cursor',
+            fileContext: {
+                fileName: editor.document.fileName,
+                language: editor.document.languageId,
+                selection: editor.selection ? {
+                    start: { line: editor.selection.start.line, character: editor.selection.start.character },
+                    end: { line: editor.selection.end.line, character: editor.selection.end.character }
+                } : undefined,
+                content: editor.selection ? editor.document.getText(editor.selection) : undefined
+            },
+            interactionType: 'generation'
+        };
+
+        this.interactionListeners.forEach(listener => {
+            try {
+                listener(interaction);
+            } catch (error) {
+                console.error('CopilotIntegrationService: Error in Cursor interaction listener:', error);
             }
         });
     }
