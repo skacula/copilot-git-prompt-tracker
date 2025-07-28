@@ -2,7 +2,7 @@
   "name": "copilot-git-prompt-tracker",
   "displayName": "AI Git Prompt Tracker",
   "description": "Track and save AI assistant prompts (Copilot, Claude Code, Cursor) to GitHub repository for commit history association",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "your-publisher-name",
   "engines": {
     "vscode": "^1.102.0"

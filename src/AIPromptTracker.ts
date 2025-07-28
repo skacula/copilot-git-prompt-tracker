@@ -87,9 +87,12 @@ export class AIPromptTracker implements vscode.Disposable {
         
         // Set up automatic Copilot interaction detection
         const copilotListener = this.aiAssistantDetectionService.onInteractionDetected((interaction) => {
+            console.log(`AIPromptTracker: Auto-detected ${interaction.aiProvider} ${interaction.interactionType} interaction:`);
+            console.log(`  - Prompt: ${interaction.prompt.substring(0, 100)}...`);
+            console.log(`  - File: ${interaction.fileContext?.fileName || 'none'}`);
+            
             this.sessionMonitor.addInteraction(interaction);
             this.updateStatusBar();
-            console.log(`AIPromptTracker: Auto-detected ${interaction.interactionType} interaction`);
         });
         this.disposables.push(copilotListener);
         
@@ -338,10 +341,19 @@ ${interactionSummary || 'No interactions yet'}`;
         try {
             // Check if there are any interactions to correlate
             const currentSession = this.sessionMonitor.getCurrentSession();
+            console.log(`AIPromptTracker: Current session check:`);
+            console.log(`  - Session exists: ${!!currentSession}`);
+            console.log(`  - Interactions count: ${currentSession?.interactions.length || 0}`);
+            
             if (!currentSession || currentSession.interactions.length === 0) {
                 console.log('AIPromptTracker: No interactions to correlate with commit');
                 return;
             }
+            
+            console.log(`AIPromptTracker: Session ${currentSession.sessionId} interactions:`);
+            currentSession.interactions.forEach((interaction, index) => {
+                console.log(`  ${index + 1}. ${interaction.aiProvider} ${interaction.interactionType}: ${interaction.prompt.substring(0, 50)}...`);
+            });
 
             // Finalize session with commit info
             const finalizedSession = this.sessionMonitor.finalizeSessionWithCommit({
@@ -446,8 +458,14 @@ ${interactionSummary || 'No interactions yet'}`;
         const sanitizedSession = await this.sanitizeSession(session);
 
         // Convert session to prompt entry format
+        const formattedPrompt = this.formatSessionAsPrompt(sanitizedSession);
+        console.log(`AIPromptTracker: About to save session to GitHub:`);
+        console.log(`  - Session ID: ${sanitizedSession.sessionId}`);
+        console.log(`  - Interactions: ${sanitizedSession.interactions.length}`);
+        console.log(`  - Formatted prompt preview: ${formattedPrompt.substring(0, 200)}...`);
+        
         const promptEntry: PromptEntry = {
-            prompt: this.formatSessionAsPrompt(sanitizedSession),
+            prompt: formattedPrompt,
             response: this.formatSessionResponse(sanitizedSession),
             timestamp: sanitizedSession.endTime || sanitizedSession.startTime,
             gitInfo: {
@@ -494,14 +512,23 @@ ${interactionSummary || 'No interactions yet'}`;
     }
 
     private formatSessionAsPrompt(session: DevelopmentSession): string {
+        console.log(`AIPromptTracker: Formatting session with ${session.interactions.length} interactions`);
+        
+        if (session.interactions.length === 0) {
+            return 'No AI interactions captured in this session';
+        }
+
         // Create clean, focused prompt entries
         const interactions = session.interactions
-            .map((interaction, index) => 
-                `[${index + 1}] ${interaction.interactionType.toUpperCase()}: ${interaction.prompt}`
-            )
+            .map((interaction, index) => {
+                console.log(`AIPromptTracker: Interaction ${index + 1}: ${interaction.interactionType} - ${interaction.prompt.substring(0, 100)}...`);
+                return `[${index + 1}] ${interaction.interactionType.toUpperCase()}: ${interaction.prompt}`;
+            })
             .join('\n\n');
 
-        return interactions;
+        const result = interactions || 'Session contained interactions but no extractable prompts';
+        console.log(`AIPromptTracker: Final formatted prompt length: ${result.length}`);
+        return result;
     }
 
     private formatSessionResponse(session: DevelopmentSession): string {
