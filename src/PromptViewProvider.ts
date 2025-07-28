@@ -41,8 +41,8 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
                     case 'configure':
                         vscode.commands.executeCommand('copilotPromptTracker.configure');
                         break;
-                    case 'openPrompt':
-                        this.openPromptDetails(message.prompt);
+                    case 'togglePrompt':
+                        this.sendPromptDetails(message.promptIndex, message.expanded);
                         break;
                 }
             },
@@ -85,14 +85,38 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
         }
     }
 
-    private async openPromptDetails(prompt: PromptEntry) {
-        // Create a new document with the prompt details
-        const content = this.formatPromptForDisplay(prompt);
-        const doc = await vscode.workspace.openTextDocument({
-            content,
-            language: 'markdown'
-        });
-        await vscode.window.showTextDocument(doc);
+    private async sendPromptDetails(promptIndex: number, expanded: boolean) {
+        if (!this._view || this._disposed) {
+            return;
+        }
+
+        if (!expanded) {
+            // Collapse - no need to send details
+            return;
+        }
+
+        const config = this.configManager.getConfiguration();
+        if (!config.githubRepo) {
+            return;
+        }
+
+        try {
+            const [owner, repo] = config.githubRepo.split('/');
+            const prompts = await this.githubService.listPrompts(owner, repo, config.saveLocation);
+            
+            if (promptIndex >= 0 && promptIndex < prompts.length) {
+                const prompt = prompts[promptIndex];
+                const details = this.formatPromptDetailsForWebview(prompt);
+                
+                this._view.webview.postMessage({
+                    type: 'promptDetails',
+                    index: promptIndex,
+                    details: details
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load prompt details:', error);
+        }
     }
 
     private formatPromptForDisplay(prompt: PromptEntry): string {
@@ -162,6 +186,20 @@ ${cleanPrompts}
         }
         
         return cleanPrompts || 'No prompts found in session data';
+    }
+
+    private formatPromptDetailsForWebview(prompt: PromptEntry): any {
+        const cleanPrompts = this.extractCleanPrompts(prompt.prompt);
+        
+        return {
+            branch: prompt.gitInfo.branch,
+            commit: prompt.gitInfo.commitHash,
+            author: prompt.gitInfo.author,
+            timestamp: new Date(prompt.timestamp).toLocaleString(),
+            files: prompt.gitInfo.changedFiles,
+            prompts: cleanPrompts,
+            response: prompt.response
+        };
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
@@ -312,6 +350,51 @@ ${cleanPrompts}
                         box-sizing: border-box;
                     }
                     
+                    .prompt-details {
+                        margin-top: 12px;
+                        padding: 12px;
+                        background-color: var(--vscode-editor-background);
+                        border: 1px solid var(--vscode-panel-border);
+                        border-radius: 4px;
+                        display: none;
+                    }
+                    
+                    .prompt-details.expanded {
+                        display: block;
+                    }
+                    
+                    .prompt-details h4 {
+                        margin: 0 0 8px 0;
+                        color: var(--vscode-foreground);
+                        font-size: 14px;
+                        font-weight: 600;
+                    }
+                    
+                    .prompt-details-content {
+                        background-color: var(--vscode-textCodeBlock-background);
+                        padding: 12px;
+                        border-radius: 4px;
+                        border-left: 3px solid var(--vscode-charts-purple);
+                        margin-bottom: 12px;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        line-height: 1.5;
+                    }
+                    
+                    .expand-button {
+                        background: none;
+                        border: none;
+                        color: var(--vscode-textLink-foreground);
+                        cursor: pointer;
+                        padding: 0;
+                        font-size: 12px;
+                        margin-top: 6px;
+                    }
+                    
+                    .expand-button:hover {
+                        text-decoration: underline;
+                    }
+                    
                     .empty-state {
                         text-align: center;
                         padding: 40px 20px;
@@ -362,11 +445,27 @@ ${cleanPrompts}
                         vscode.postMessage({ type: 'configure' });
                     }
                     
-                    function openPrompt(prompt) {
-                        vscode.postMessage({ 
-                            type: 'openPrompt', 
-                            prompt: prompt 
-                        });
+                    function togglePrompt(index, button) {
+                        const promptItem = button.closest('.prompt-item');
+                        const detailsDiv = promptItem.querySelector('.prompt-details');
+                        const isExpanded = detailsDiv.classList.contains('expanded');
+                        
+                        if (isExpanded) {
+                            detailsDiv.classList.remove('expanded');
+                            button.textContent = '▼ Show details';
+                        } else {
+                            detailsDiv.classList.add('expanded');
+                            button.textContent = '▲ Hide details';
+                            
+                            // Request details from extension if not already loaded
+                            if (!detailsDiv.hasAttribute('data-loaded')) {
+                                vscode.postMessage({ 
+                                    type: 'togglePrompt', 
+                                    promptIndex: index,
+                                    expanded: true
+                                });
+                            }
+                        }
                     }
                     
                     function truncatePrompt(prompt) {
@@ -427,6 +526,9 @@ ${cleanPrompts}
                             case 'prompts':
                                 displayPrompts(message.data);
                                 break;
+                            case 'promptDetails':
+                                displayPromptDetails(message.index, message.details);
+                                break;
                             case 'noConfig':
                                 content.innerHTML = \`
                                     <div class="empty-state">
@@ -472,6 +574,10 @@ ${cleanPrompts}
                                 <div class="prompt-files">
                                     📁 \${formatFilesList(prompt.gitInfo.changedFiles)}
                                 </div>
+                                <button class="expand-button" onclick="togglePrompt(\${index}, this)">▼ Show details</button>
+                                <div class="prompt-details">
+                                    <div class="loading">Loading details...</div>
+                                </div>
                             </div>
                         \`).join('');
                         
@@ -479,20 +585,22 @@ ${cleanPrompts}
                         
                         // Store prompts data for event handlers
                         window.promptsData = prompts;
-                        
-                        // Add event delegation for prompt items
-                        const promptList = content.querySelector('.prompt-list');
-                        if (promptList) {
-                            promptList.addEventListener('click', function(e) {
-                                const promptItem = e.target.closest('.prompt-item');
-                                if (promptItem) {
-                                    const index = parseInt(promptItem.dataset.promptIndex);
-                                    const prompt = window.promptsData[index];
-                                    if (prompt) {
-                                        openPrompt(prompt);
-                                    }
-                                }
-                            });
+                    }
+                    
+                    function displayPromptDetails(index, details) {
+                        const promptItem = document.querySelector(\`[data-prompt-index="\${index}"] .prompt-details\`);
+                        if (promptItem) {
+                            promptItem.setAttribute('data-loaded', 'true');
+                            promptItem.innerHTML = \`
+                                <h4>📅 \${details.timestamp}</h4>
+                                <div class="prompt-details-content">\${details.prompts}</div>
+                                \${details.response && details.response !== 'undefined' ? \`
+                                <h4>💬 Response</h4>
+                                <div class="prompt-details-content">\${details.response}</div>
+                                \` : ''}
+                                <h4>📁 Modified Files</h4>
+                                <div class="prompt-details-content">\${details.files.map(f => \`• \${f}\`).join('\\n')}</div>
+                            \`;
                         }
                     }
                 </script>
