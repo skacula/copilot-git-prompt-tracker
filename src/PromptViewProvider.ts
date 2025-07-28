@@ -96,32 +96,72 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
     }
 
     private formatPromptForDisplay(prompt: PromptEntry): string {
-        return `# Copilot Prompt Details
+        // Extract clean prompts from session data
+        const cleanPrompts = this.extractCleanPrompts(prompt.prompt);
+        
+        return `# AI Prompt Session
 
-**Timestamp:** ${new Date(prompt.timestamp).toLocaleString()}
+**🌿 Branch:** ${prompt.gitInfo.branch}
+**📝 Commit:** ${prompt.gitInfo.commitHash}
+**👤 Author:** ${prompt.gitInfo.author}
 
-**Repository:** ${prompt.gitInfo.repository}
-**Branch:** ${prompt.gitInfo.branch}
-**Commit:** ${prompt.gitInfo.commitHash}
-**Author:** ${prompt.gitInfo.author}
-
-## Changed Files
+## 📁 Files Modified
 ${prompt.gitInfo.changedFiles.map(file => `- ${file}`).join('\n')}
 
-## Prompt
-\`\`\`
-${prompt.prompt}
-\`\`\`
+## 💬 Prompts & Responses
+${cleanPrompts}
 
-${prompt.response ? `## Response
-\`\`\`
-${prompt.response}
-\`\`\`` : ''}
-
-## Metadata
-- **VS Code Version:** ${prompt.metadata.vscodeVersion}
-- **Extension Version:** ${prompt.metadata.extensionVersion}
+---
+*Captured on ${new Date(prompt.timestamp).toLocaleString()}*
 `;
+    }
+
+    private extractCleanPrompts(rawPrompt: string): string {
+        // Handle legacy "Development Session" format
+        if (rawPrompt.includes('Development Session:')) {
+            const lines = rawPrompt.split('\n');
+            let extractedContent = '';
+            let inInteractionSection = false;
+            
+            for (const line of lines) {
+                if (line.includes('Copilot Interactions:') || line.includes('AI Interactions:')) {
+                    inInteractionSection = true;
+                    continue;
+                }
+                
+                if (inInteractionSection && line.trim()) {
+                    extractedContent += line + '\n';
+                }
+            }
+            
+            return extractedContent.trim() || 'Legacy session data with no extracted prompts';
+        }
+        
+        // Handle new clean format
+        const lines = rawPrompt.split('\n');
+        let cleanPrompts = '';
+        let currentInteraction = '';
+        
+        for (const line of lines) {
+            // Look for interaction markers
+            const interactionMatch = line.match(/^\[(\d+)\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*(.+)$/);
+            if (interactionMatch) {
+                if (currentInteraction) {
+                    cleanPrompts += currentInteraction + '\n\n';
+                }
+                const [, num, type, content] = interactionMatch;
+                currentInteraction = `**${num}. ${type}:** ${content}`;
+            } else if (line.trim() && currentInteraction) {
+                // Continue building current interaction
+                currentInteraction += '\n' + line;
+            }
+        }
+        
+        if (currentInteraction) {
+            cleanPrompts += currentInteraction;
+        }
+        
+        return cleanPrompts || 'No prompts found in session data';
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
@@ -146,6 +186,10 @@ ${prompt.response}
                         font-size: var(--vscode-font-size);
                         font-weight: var(--vscode-font-weight);
                         padding: 10px;
+                        margin: 0;
+                        max-width: 100%;
+                        overflow-x: hidden;
+                        box-sizing: border-box;
                     }
                     
                     .header {
@@ -199,10 +243,13 @@ ${prompt.response}
                     
                     .prompt-item {
                         border: 1px solid var(--vscode-panel-border);
-                        border-radius: 4px;
-                        padding: 12px;
+                        border-radius: 6px;
+                        padding: 14px;
                         cursor: pointer;
                         transition: background-color 0.1s;
+                        margin-bottom: 8px;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
                     }
                     
                     .prompt-item:hover {
@@ -211,41 +258,58 @@ ${prompt.response}
                     
                     .prompt-header {
                         display: flex;
-                        justify-content: space-between;
+                        gap: 12px;
                         align-items: center;
-                        margin-bottom: 8px;
+                        margin-bottom: 6px;
+                        flex-wrap: wrap;
                     }
                     
-                    .prompt-timestamp {
+                    .prompt-branch {
                         font-size: 12px;
-                        color: var(--vscode-descriptionForeground);
+                        color: var(--vscode-charts-green);
+                        font-weight: 500;
                     }
                     
-                    .prompt-repo {
+                    .prompt-commit {
+                        font-size: 12px;
+                        color: var(--vscode-charts-blue);
+                        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+                    }
+                    
+                    .prompt-author {
                         font-size: 11px;
                         color: var(--vscode-descriptionForeground);
-                        background-color: var(--vscode-badge-background);
-                        padding: 2px 6px;
-                        border-radius: 3px;
+                        margin-bottom: 6px;
                     }
                     
                     .prompt-preview {
                         font-size: 13px;
                         color: var(--vscode-foreground);
-                        line-height: 1.4;
+                        line-height: 1.5;
                         margin-bottom: 8px;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        display: -webkit-box;
-                        -webkit-line-clamp: 3;
-                        -webkit-box-orient: vertical;
+                        background-color: var(--vscode-textCodeBlock-background);
+                        padding: 10px;
+                        border-radius: 4px;
+                        border-left: 3px solid var(--vscode-charts-purple);
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        white-space: normal;
+                        max-width: 100%;
+                        box-sizing: border-box;
                     }
                     
-                    .prompt-meta {
-                        display: flex;
-                        gap: 12px;
+                    .prompt-files {
                         font-size: 11px;
                         color: var(--vscode-descriptionForeground);
+                        background-color: var(--vscode-inputOption-activeBackground);
+                        padding: 4px 8px;
+                        border-radius: 3px;
+                        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        white-space: normal;
+                        max-width: 100%;
+                        box-sizing: border-box;
                     }
                     
                     .empty-state {
@@ -269,7 +333,7 @@ ${prompt.response}
             </head>
             <body>
                 <div class="header">
-                    <div class="title">📝 Copilot Prompts</div>
+                    <div class="title">🤖 AI Prompts</div>
                     <div class="actions">
                         <button id="refresh-button" class="secondary-button">↻ Refresh</button>
                         <button id="configure-button">⚙️ Configure</button>
@@ -303,6 +367,55 @@ ${prompt.response}
                             type: 'openPrompt', 
                             prompt: prompt 
                         });
+                    }
+                    
+                    function truncatePrompt(prompt) {
+                        if (!prompt) return 'No prompt available';
+                        
+                        // Handle old "Development Session" format
+                        if (prompt.includes('Development Session:')) {
+                            return 'Legacy session data - click to view details';
+                        }
+                        
+                        // Remove session formatting and get just the core prompts
+                        const lines = prompt.split('\\n');
+                        const interactionLines = lines.filter(line => 
+                            line.match(/^\[[0-9]+\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*/)
+                        );
+                        
+                        if (interactionLines.length > 0) {
+                            // Show first interaction, cleaned up
+                            let firstInteraction = interactionLines[0].replace(/^\[[0-9]+\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*/, '');
+                            
+                            // Clean up common generic prompts
+                            if (firstInteraction.startsWith('Code generation in ') || 
+                                firstInteraction.startsWith('Code completion for:') ||
+                                firstInteraction.startsWith('CLAUDE code generation')) {
+                                
+                                // Try to extract more meaningful content from other interactions
+                                if (interactionLines.length > 1) {
+                                    firstInteraction = interactionLines[1].replace(/^\[[0-9]+\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*/, '');
+                                } else {
+                                    firstInteraction = 'AI code generation';
+                                }
+                            }
+                            
+                            return firstInteraction.length > 100 ? firstInteraction.substring(0, 100) + '...' : firstInteraction;
+                        }
+                        
+                        // Direct prompt without formatting
+                        if (prompt.length > 100) {
+                            return prompt.substring(0, 100) + '...';
+                        }
+                        
+                        return prompt;
+                    }
+                    
+                    function formatFilesList(files) {
+                        if (!files || files.length === 0) return 'No files';
+                        if (files.length === 1) return files[0];
+                        if (files.length <= 3) return files.join(', ');
+                        return \`\${files.slice(0, 2).join(', ')} +\${files.length - 2} more\`;
                     }
                     
                     // Listen for messages from the extension
@@ -342,7 +455,7 @@ ${prompt.response}
                             content.innerHTML = \`
                                 <div class="empty-state">
                                     <p>No prompts found.</p>
-                                    <p>Start using Copilot and save your prompts!</p>
+                                    <p>Start using AI assistants and save your prompts!</p>
                                 </div>
                             \`;
                             return;
@@ -351,14 +464,13 @@ ${prompt.response}
                         const promptsHtml = prompts.map((prompt, index) => \`
                             <div class="prompt-item" data-prompt-index="\${index}">
                                 <div class="prompt-header">
-                                    <div class="prompt-timestamp">\${new Date(prompt.timestamp).toLocaleString()}</div>
-                                    <div class="prompt-repo">\${prompt.gitInfo.repository}</div>
+                                    <div class="prompt-branch">🌿 \${prompt.gitInfo.branch}</div>
+                                    <div class="prompt-commit">📝 \${prompt.gitInfo.commitHash.substring(0, 7)}</div>
                                 </div>
-                                <div class="prompt-preview">\${prompt.prompt}</div>
-                                <div class="prompt-meta">
-                                    <span>🌿 \${prompt.gitInfo.branch}</span>
-                                    <span>📝 \${prompt.gitInfo.commitHash.substring(0, 7)}</span>
-                                    <span>👤 \${prompt.gitInfo.author}</span>
+                                <div class="prompt-author">👤 \${prompt.gitInfo.author}</div>
+                                <div class="prompt-preview">\${truncatePrompt(prompt.prompt)}</div>
+                                <div class="prompt-files">
+                                    📁 \${formatFilesList(prompt.gitInfo.changedFiles)}
                                 </div>
                             </div>
                         \`).join('');

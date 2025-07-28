@@ -494,29 +494,20 @@ ${interactionSummary || 'No interactions yet'}`;
     }
 
     private formatSessionAsPrompt(session: DevelopmentSession): string {
+        // Create clean, focused prompt entries
         const interactions = session.interactions
             .map((interaction, index) => 
                 `[${index + 1}] ${interaction.interactionType.toUpperCase()}: ${interaction.prompt}`
             )
             .join('\n\n');
 
-        return `Development Session: ${session.sessionId}
-Duration: ${session.startTime} to ${session.endTime || 'ongoing'}
-Total Interactions: ${session.interactions.length}
-
-Copilot Interactions:
-${interactions}`;
+        return interactions;
     }
 
     private formatSessionResponse(session: DevelopmentSession): string {
-        const responses = session.interactions
-            .filter(interaction => interaction.response)
-            .map((interaction, index) => 
-                `[${index + 1}] ${interaction.response}`
-            )
-            .join('\n\n');
-
-        return responses || 'No responses captured';
+        // For now, include basic response info - could be enhanced later
+        const responseCount = session.interactions.filter(i => i.response).length;
+        return `${responseCount} AI responses captured`;
     }
 
     // Note: extractFileContext method removed as it's no longer used
