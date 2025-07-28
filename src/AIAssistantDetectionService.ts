@@ -295,8 +295,8 @@ export class AIAssistantDetectionService implements vscode.Disposable {
         detection: CopilotDetectionResult
     ): Promise<void> {
         try {
-            // Try to infer the prompt context from surrounding code
-            const prompt = await this.inferPromptFromContext(change, document);
+            // Try to infer the prompt context from surrounding code, AI-specific
+            const prompt = await this.inferPromptFromContext(change, document, detection.aiProvider);
             
             const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
                 prompt,
@@ -336,36 +336,191 @@ export class AIAssistantDetectionService implements vscode.Disposable {
     }
 
     /**
-     * Infer the likely prompt from code context
+     * Infer the likely prompt from code context, with AI-provider specific logic
      */
     private async inferPromptFromContext(
         change: vscode.TextDocumentContentChangeEvent,
-        document: vscode.TextDocument
+        document: vscode.TextDocument,
+        aiProvider: 'copilot' | 'claude' | 'cursor' | 'other' = 'other'
     ): Promise<string> {
         try {
-            // Get context around the change
-            const startLine = Math.max(0, change.range.start.line - 3);
-            const endLine = Math.min(document.lineCount - 1, change.range.end.line + 1);
+            // Get broader context for Claude as it typically generates larger blocks
+            const contextLines = aiProvider === 'claude' ? 5 : 3;
+            const startLine = Math.max(0, change.range.start.line - contextLines);
+            const endLine = Math.min(document.lineCount - 1, change.range.end.line + 2);
             
             let contextBefore = '';
+            let contextAfter = '';
+            
+            // Get context before the change
             for (let i = startLine; i < change.range.start.line; i++) {
                 contextBefore += document.lineAt(i).text + '\\n';
             }
+            
+            // Get context after the change for better inference
+            for (let i = change.range.end.line + 1; i <= endLine; i++) {
+                if (i < document.lineCount) {
+                    contextAfter += document.lineAt(i).text + '\\n';
+                }
+            }
 
-            // Infer intent from context
-            if (this.isCommentLikeContent(change.text, document.languageId)) {
-                return `Generate comment for code: ${contextBefore.trim()}`;
+            // Claude-specific prompt inference
+            if (aiProvider === 'claude') {
+                return this.inferClaudePrompt(change, contextBefore, contextAfter, document);
             }
             
-            if (this.isFunctionLikeContent(change.text, document.languageId)) {
-                return `Complete function implementation based on: ${contextBefore.trim()}`;
+            // Copilot-specific prompt inference
+            if (aiProvider === 'copilot') {
+                return this.inferCopilotPrompt(change, contextBefore, document);
+            }
+            
+            // Cursor-specific prompt inference
+            if (aiProvider === 'cursor') {
+                return this.inferCursorPrompt(change, contextBefore, document);
             }
 
-            // Generic completion
-            return `Code completion for: ${contextBefore.trim() || 'code generation'}`;
+            // Generic prompt inference
+            return this.inferGenericPrompt(change, contextBefore, document);
         } catch (error) {
-            return `Code completion in ${document.fileName}`;
+            return `${aiProvider.toUpperCase()} code generation in ${document.fileName}`;
         }
+    }
+
+    /**
+     * Claude-specific prompt inference based on typical Claude patterns
+     */
+    private inferClaudePrompt(
+        change: vscode.TextDocumentContentChangeEvent,
+        contextBefore: string,
+        contextAfter: string,
+        document: vscode.TextDocument
+    ): string {
+        const generatedText = change.text;
+        
+        // Claude often generates complete functions with explanatory comments
+        if (this.isCompleteFunction(generatedText, document.languageId)) {
+            if (this.hasThoughtfulComments(generatedText, document.languageId)) {
+                return `Write a complete function with comments for: ${contextBefore.trim() || 'the given requirements'}`;
+            }
+            return `Implement the function: ${contextBefore.trim() || 'based on context'}`;
+        }
+        
+        // Claude frequently adds detailed comments
+        if (this.hasThoughtfulComments(generatedText, document.languageId)) {
+            return `Add detailed comments explaining: ${contextBefore.trim() || 'this code'}`;
+        }
+        
+        // Claude often generates multi-line, well-structured code blocks
+        if (generatedText.split('\\n').length > 10) {
+            const firstLine = contextBefore.split('\\n').pop()?.trim() || '';
+            if (firstLine.includes('class') || firstLine.includes('interface')) {
+                return `Create a ${firstLine.includes('class') ? 'class' : 'interface'} implementation for: ${firstLine}`;
+            }
+            return `Generate a comprehensive code block to ${this.inferIntentFromContext(contextBefore, contextAfter)}`;
+        }
+        
+        // Claude often refactors or improves existing code
+        if (contextBefore.trim() && generatedText.length > contextBefore.length) {
+            return `Refactor and improve this code: ${contextBefore.trim()}`;
+        }
+        
+        // Default Claude prompt
+        return `Generate code to ${this.inferIntentFromContext(contextBefore, contextAfter) || 'solve the problem'}`;
+    }
+
+    /**
+     * Copilot-specific prompt inference
+     */
+    private inferCopilotPrompt(
+        change: vscode.TextDocumentContentChangeEvent,
+        contextBefore: string,
+        document: vscode.TextDocument
+    ): string {
+        const generatedText = change.text;
+        
+        // Copilot often completes partial lines or functions
+        if (this.isFunctionLikeContent(generatedText, document.languageId)) {
+            return `Complete the function: ${contextBefore.trim()}`;
+        }
+        
+        // Copilot frequently generates inline completions
+        if (generatedText.split('\\n').length <= 3) {
+            return `Complete this line: ${contextBefore.split('\\n').pop()?.trim() || contextBefore.trim()}`;
+        }
+        
+        // Copilot comment completions
+        if (this.isCommentLikeContent(generatedText, document.languageId)) {
+            return `Generate comment for: ${contextBefore.trim()}`;
+        }
+        
+        return `Copilot completion for: ${contextBefore.trim() || 'code generation'}`;
+    }
+
+    /**
+     * Cursor-specific prompt inference
+     */
+    private inferCursorPrompt(
+        change: vscode.TextDocumentContentChangeEvent,
+        contextBefore: string,
+        document: vscode.TextDocument
+    ): string {
+        const generatedText = change.text;
+        
+        // Cursor often generates focused, concise completions
+        if (generatedText.length < 100) {
+            return `Complete: ${contextBefore.split('\\n').pop()?.trim() || contextBefore.trim()}`;
+        }
+        
+        return `Cursor completion for: ${contextBefore.trim() || 'code generation'}`;
+    }
+
+    /**
+     * Generic prompt inference for unknown AI providers
+     */
+    private inferGenericPrompt(
+        change: vscode.TextDocumentContentChangeEvent,
+        contextBefore: string,
+        document: vscode.TextDocument
+    ): string {
+        const generatedText = change.text;
+        
+        if (this.isCommentLikeContent(generatedText, document.languageId)) {
+            return `Generate comment for: ${contextBefore.trim()}`;
+        }
+        
+        if (this.isFunctionLikeContent(generatedText, document.languageId)) {
+            return `Complete function implementation: ${contextBefore.trim()}`;
+        }
+
+        return `Code completion for: ${contextBefore.trim() || 'code generation'}`;
+    }
+
+    /**
+     * Infer intent from surrounding context
+     */
+    private inferIntentFromContext(contextBefore: string, contextAfter: string): string {
+        const combined = (contextBefore + ' ' + contextAfter).toLowerCase();
+        
+        if (combined.includes('todo') || combined.includes('fixme')) {
+            return 'implement TODO or fix issue';
+        }
+        if (combined.includes('test') || combined.includes('spec')) {
+            return 'write tests';
+        }
+        if (combined.includes('error') || combined.includes('exception')) {
+            return 'handle errors';
+        }
+        if (combined.includes('async') || combined.includes('await') || combined.includes('promise')) {
+            return 'implement async functionality';
+        }
+        if (combined.includes('api') || combined.includes('endpoint')) {
+            return 'implement API functionality';
+        }
+        if (combined.includes('database') || combined.includes('query')) {
+            return 'implement database operations';
+        }
+        
+        return 'implement functionality';
     }
 
     /**
@@ -738,40 +893,78 @@ export class AIAssistantDetectionService implements vscode.Disposable {
 
         // Claude Code typically generates substantial blocks of code
         if (change.text.length > 50 && change.rangeLength === 0) {
-            confidence += 0.3;
+            confidence += 0.25;
             
             // Extra confidence for very large blocks typical of Claude
             if (change.text.length > 200) {
-                confidence += 0.2;
+                confidence += 0.15;
+            }
+            
+            // Even higher confidence for massive blocks (Claude's specialty)
+            if (change.text.length > 500) {
+                confidence += 0.15;
             }
         }
 
-        // Claude often includes thoughtful comments
+        // Claude often includes thoughtful comments with explanations
         if (this.hasThoughtfulComments(change.text, document.languageId)) {
             confidence += 0.3;
             interactionType = 'comment';
         }
 
-        // Claude tends to generate complete functions/methods
+        // Claude tends to generate complete, well-structured functions/methods
         if (this.isCompleteFunction(change.text, document.languageId)) {
-            confidence += 0.3;
+            confidence += 0.25;
+            
+            // Extra points for functions with docstrings/JSDoc
+            if (this.hasDocumentation(change.text, document.languageId)) {
+                confidence += 0.1;
+            }
         }
 
         // Check for Claude Code extension presence
         if (this.claudeExtension && this.claudeExtension.isActive) {
-            confidence += 0.2;
+            confidence += 0.15;
         }
 
-        // Claude often generates multi-line explanatory text
-        if (change.text.includes('\n') && change.text.split('\n').length > 5) {
-            confidence += 0.2;
+        // Claude often generates multi-line explanatory text with proper structure
+        const lines = change.text.split('\n');
+        if (lines.length > 5) {
+            confidence += 0.15;
+            
+            // Claude tends to use consistent indentation
+            if (this.hasConsistentIndentation(lines)) {
+                confidence += 0.1;
+            }
+        }
+
+        // Claude frequently includes error handling
+        if (this.hasErrorHandling(change.text, document.languageId)) {
+            confidence += 0.1;
+        }
+
+        // Claude often adds type annotations (TypeScript/Python)
+        if (this.hasTypeAnnotations(change.text, document.languageId)) {
+            confidence += 0.1;
+        }
+
+        // Claude typically generates more verbose, explanatory code
+        if (this.isVerboseCode(change.text)) {
+            confidence += 0.1;
+        }
+
+        // Instant insertion pattern (not typed gradually)
+        const documentUri = document.uri.toString();
+        const typingSpeed = this.getRecentTypingSpeed(documentUri);
+        if (typingSpeed === 0 && change.text.length > 100) {
+            confidence += 0.15; // Large instant insertions are likely AI
         }
 
         // Lower threshold for Claude detection since it has distinct patterns
-        const detected = confidence > 0.4;
+        const detected = confidence > 0.45;
         
         if (detected) {
-            console.log(`🧠 Claude pattern detected: length=${change.text.length}, confidence=${Math.round(confidence * 100)}%`);
+            console.log(`🧠 Claude pattern detected: length=${change.text.length}, lines=${lines.length}, confidence=${Math.round(confidence * 100)}%`);
         }
 
         return {
@@ -913,6 +1106,108 @@ export class AIAssistantDetectionService implements vscode.Disposable {
     }
 
     /**
+     * Check if code has documentation (JSDoc, docstrings, etc.)
+     */
+    private hasDocumentation(text: string, language: string): boolean {
+        const docPatterns = {
+            'typescript': /\/\*\*[\s\S]*?\*\/|\/\/\s*@\w+/,
+            'javascript': /\/\*\*[\s\S]*?\*\/|\/\/\s*@\w+/,
+            'python': /"""[\s\S]*?"""|'''[\s\S]*?'''|#\s*@\w+/,
+            'java': /\/\*\*[\s\S]*?\*\/|\/\/\s*@\w+/,
+            'csharp': /\/\*\*[\s\S]*?\*\/|\/\/\s*<\w+>/
+        };
+        
+        const pattern = docPatterns[language as keyof typeof docPatterns];
+        return pattern ? pattern.test(text) : false;
+    }
+
+    /**
+     * Check if lines have consistent indentation
+     */
+    private hasConsistentIndentation(lines: string[]): boolean {
+        const indentedLines = lines.filter(line => line.trim().length > 0 && line.match(/^\s+/));
+        if (indentedLines.length < 2) {
+            return false;
+        }
+        
+        // Check if indentation follows a consistent pattern (2, 4, or tab spaces)
+        const indentations = indentedLines.map(line => {
+            const match = line.match(/^(\s+)/);
+            return match ? match[1].length : 0;
+        });
+        
+        // Check for consistent 2-space or 4-space indentation
+        const hasConsistent2Space = indentations.every(indent => indent % 2 === 0);
+        const hasConsistent4Space = indentations.every(indent => indent % 4 === 0);
+        
+        return hasConsistent2Space || hasConsistent4Space;
+    }
+
+    /**
+     * Check if code includes error handling patterns
+     */
+    private hasErrorHandling(text: string, language: string): boolean {
+        const errorPatterns = {
+            'typescript': /try\s*\{|catch\s*\(|throw\s+|Error\(|\.catch\(|Promise\.reject/,
+            'javascript': /try\s*\{|catch\s*\(|throw\s+|Error\(|\.catch\(|Promise\.reject/,
+            'python': /try:|except\s+|raise\s+|Exception\(|finally:/,
+            'java': /try\s*\{|catch\s*\(|throw\s+|throws\s+|Exception/,
+            'csharp': /try\s*\{|catch\s*\(|throw\s+|Exception/,
+            'go': /if\s+err\s*!=\s*nil|error\s*\{|panic\(/,
+            'rust': /Result<|Error>|\.unwrap\(|\.expect\(|panic!/
+        };
+        
+        const pattern = errorPatterns[language as keyof typeof errorPatterns];
+        return pattern ? pattern.test(text) : /error|exception|catch|try/i.test(text);
+    }
+
+    /**
+     * Check if code has type annotations
+     */
+    private hasTypeAnnotations(text: string, language: string): boolean {
+        const typePatterns = {
+            'typescript': /:\s*\w+(\[\])?(\s*\|\s*\w+)*\s*[=;,\)]/,
+            'python': /:\s*\w+(\[.*?\])?(\s*\|\s*\w+)*\s*[=,\)]/,
+            'java': /\b(public|private|protected)\s+\w+\s+\w+\s*\(/,
+            'csharp': /\b(public|private|protected)\s+\w+\s+\w+\s*\(/,
+            'go': /func\s+\w+\s*\([^)]*\)\s*\w+/,
+            'rust': /:\s*&?\w+|fn\s+\w+\([^)]*\)\s*->/
+        };
+        
+        const pattern = typePatterns[language as keyof typeof typePatterns];
+        return pattern ? pattern.test(text) : false;
+    }
+
+    /**
+     * Check if code is verbose (characteristic of Claude's explanatory style)
+     */
+    private isVerboseCode(text: string): boolean {
+        const lines = text.split('\n').filter(line => line.trim().length > 0);
+        if (lines.length < 5) {
+            return false;
+        }
+        
+        // Look for verbose patterns
+        const commentLines = lines.filter(line => 
+            line.trim().startsWith('//') || 
+            line.trim().startsWith('#') || 
+            line.trim().startsWith('/*') ||
+            line.trim().startsWith('*')
+        );
+        
+        // Claude tends to have more comments relative to code
+        const commentRatio = commentLines.length / lines.length;
+        
+        // Claude also uses longer variable/function names
+        const hasDescriptiveNames = /\w{8,}/.test(text); // 8+ char identifiers
+        
+        // Claude often includes multiple blank lines for readability
+        const hasSpacing = text.includes('\n\n');
+        
+        return commentRatio > 0.2 || hasDescriptiveNames || hasSpacing;
+    }
+
+    /**
      * Update captureInteraction to handle AI interactions
      */
     private async captureAIInteraction(
@@ -921,8 +1216,8 @@ export class AIAssistantDetectionService implements vscode.Disposable {
         detection: AIDetectionResult
     ): Promise<void> {
         try {
-            // Try to infer the prompt context from surrounding code
-            const prompt = await this.inferPromptFromContext(change, document);
+            // Try to infer the prompt context from surrounding code, AI-specific
+            const prompt = await this.inferPromptFromContext(change, document, detection.aiProvider);
             
             const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
                 prompt,
