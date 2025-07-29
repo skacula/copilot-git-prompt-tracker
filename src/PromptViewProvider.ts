@@ -188,8 +188,137 @@ ${cleanPrompts}
         return cleanPrompts || 'No prompts found in session data';
     }
 
+    private parseAndFormatPrompts(rawPrompt: string): string {
+        // Handle legacy "Development Session" format
+        if (rawPrompt.includes('Development Session:')) {
+            const lines = rawPrompt.split('\n');
+            let extractedContent = '';
+            let inInteractionSection = false;
+            
+            for (const line of lines) {
+                if (line.includes('Copilot Interactions:') || line.includes('AI Interactions:')) {
+                    inInteractionSection = true;
+                    continue;
+                }
+                
+                if (inInteractionSection && line.trim()) {
+                    extractedContent += this.parsePromptEntry(line) + '\n\n';
+                }
+            }
+            
+            return extractedContent.trim() || 'Legacy session data with no extracted prompts';
+        }
+        
+        // Handle new clean format
+        const lines = rawPrompt.split('\n');
+        let formattedPrompts = '';
+        
+        for (const line of lines) {
+            // Look for interaction markers
+            const interactionMatch = line.match(/^\[(\d+)\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*(.+)$/);
+            if (interactionMatch) {
+                const [, num, type, content] = interactionMatch;
+                const parsedEntry = this.parsePromptEntry(content, type, num);
+                formattedPrompts += parsedEntry + '\n\n';
+            }
+        }
+        
+        return formattedPrompts.trim() || 'No prompts found in session data';
+    }
+
+    private parsePromptEntry(content: string, type?: string, num?: string): string {
+        // Try to detect and parse JSON content first
+        const jsonContent = this.extractJsonFromContent(content);
+        if (jsonContent) {
+            return this.formatJsonAsKeyValue(jsonContent, type, num);
+        }
+        
+        // Handle structured text content (like "Code generation in /path/file")
+        const structuredData = this.parseStructuredContent(content, type, num);
+        if (structuredData) {
+            return structuredData;
+        }
+        
+        // Handle INLINE code generation without JSON (likely human modified)
+        if (type === 'INLINE' && content.startsWith('Code generation')) {
+            return this.formatInlineCodeGeneration(content, num);
+        }
+        
+        // Fallback to formatted display
+        const header = type && num ? `**${num}. ${type}:**` : '**Prompt:**';
+        return `${header}\n  Content: ${content}`;
+    }
+
+    private extractJsonFromContent(content: string): any {
+        // Look for JSON objects within the content
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                return JSON.parse(jsonMatch[0]);
+            } catch (error) {
+                // JSON parsing failed, continue with other methods
+            }
+        }
+        
+        // Look for JSON-like key:value patterns
+        const keyValuePattern = /(\w+):\s*([^,}\n]+)/g;
+        let match;
+        const jsonLike: any = {};
+        let hasMatches = false;
+        
+        while ((match = keyValuePattern.exec(content)) !== null) {
+            const [, key, value] = match;
+            jsonLike[key] = value.trim();
+            hasMatches = true;
+        }
+        
+        return hasMatches ? jsonLike : null;
+    }
+
+    private formatJsonAsKeyValue(jsonData: any, type?: string, num?: string): string {
+        const header = type && num ? `**${num}. ${type}:**` : '**Prompt:**';
+        let formatted = header + '\n';
+        
+        for (const [key, value] of Object.entries(jsonData)) {
+            formatted += `  ${key}: ${value}\n`;
+        }
+        
+        return formatted.trim();
+    }
+
+    private parseStructuredContent(content: string, type?: string, num?: string): string | null {
+        // Parse "Code generation in /path/file" format
+        const codeGenMatch = content.match(/^Code generation in (.+)$/);
+        if (codeGenMatch) {
+            const header = type && num ? `**${num}. ${type}:**` : '**Code Generation:**';
+            return `${header}\n  Action: Code generation\n  File: ${codeGenMatch[1]}`;
+        }
+        
+        // Parse "Code completion for: something" format
+        const codeCompletionMatch = content.match(/^Code completion for:\s*(.+)$/);
+        if (codeCompletionMatch) {
+            const header = type && num ? `**${num}. ${type}:**` : '**Code Completion:**';
+            return `${header}\n  Action: Code completion\n  Context: ${codeCompletionMatch[1]}`;
+        }
+        
+        // Parse other structured patterns as needed
+        return null;
+    }
+
+    private formatInlineCodeGeneration(content: string, num?: string): string {
+        const header = num ? `**${num}. INLINE:**` : '**INLINE:**';
+        
+        // Extract file path if present
+        const fileMatch = content.match(/in (.+)$/);
+        if (fileMatch) {
+            return `${header}\n  Type: Code generation\n  File: ${fileMatch[1]}\n  Note: Human-modified content (no JSON data)`;
+        }
+        
+        return `${header}\n  Type: Code generation\n  Content: ${content}\n  Note: Human-modified content (no JSON data)`;
+    }
+
     private formatPromptDetailsForWebview(prompt: PromptEntry): any {
-        const cleanPrompts = this.extractCleanPrompts(prompt.prompt);
+        const parsedPrompts = this.parseAndFormatPrompts(prompt.prompt);
         
         return {
             branch: prompt.gitInfo.branch,
@@ -197,7 +326,7 @@ ${cleanPrompts}
             author: prompt.gitInfo.author,
             timestamp: new Date(prompt.timestamp).toLocaleString(),
             files: prompt.gitInfo.changedFiles,
-            prompts: cleanPrompts,
+            prompts: parsedPrompts,
             response: prompt.response
         };
     }
@@ -445,6 +574,15 @@ ${cleanPrompts}
                         vscode.postMessage({ type: 'configure' });
                     }
                     
+                    function addExpandButtonListeners() {
+                        document.querySelectorAll('.expand-button').forEach(button => {
+                            button.addEventListener('click', function() {
+                                const index = parseInt(this.getAttribute('data-prompt-index'));
+                                togglePrompt(index, this);
+                            });
+                        });
+                    }
+                    
                     function togglePrompt(index, button) {
                         const promptItem = button.closest('.prompt-item');
                         const detailsDiv = promptItem.querySelector('.prompt-details');
@@ -536,7 +674,13 @@ ${cleanPrompts}
                                         <button id="configure-now-button">Configure Now</button>
                                     </div>
                                 \`;
-                                document.getElementById('configure-now-button').addEventListener('click', configure);
+                                // Add event listener after DOM insertion
+                                setTimeout(() => {
+                                    const configButton = document.getElementById('configure-now-button');
+                                    if (configButton) {
+                                        configButton.addEventListener('click', configure);
+                                    }
+                                }, 0);
                                 break;
                             case 'error':
                                 content.innerHTML = \`
@@ -545,7 +689,13 @@ ${cleanPrompts}
                                         <button id="try-again-button">Try Again</button>
                                     </div>
                                 \`;
-                                document.getElementById('try-again-button').addEventListener('click', refresh);
+                                // Add event listener after DOM insertion
+                                setTimeout(() => {
+                                    const tryAgainButton = document.getElementById('try-again-button');
+                                    if (tryAgainButton) {
+                                        tryAgainButton.addEventListener('click', refresh);
+                                    }
+                                }, 0);
                                 break;
                         }
                     });
@@ -574,7 +724,7 @@ ${cleanPrompts}
                                 <div class="prompt-files">
                                     📁 \${formatFilesList(prompt.gitInfo.changedFiles)}
                                 </div>
-                                <button class="expand-button" onclick="togglePrompt(\${index}, this)">▼ Show details</button>
+                                <button class="expand-button" data-prompt-index="\${index}">▼ Show details</button>
                                 <div class="prompt-details">
                                     <div class="loading">Loading details...</div>
                                 </div>
@@ -582,6 +732,9 @@ ${cleanPrompts}
                         \`).join('');
                         
                         content.innerHTML = \`<div class="prompt-list">\${promptsHtml}</div>\`;
+                        
+                        // Add event listeners for expand buttons
+                        addExpandButtonListeners();
                         
                         // Store prompts data for event handlers
                         window.promptsData = prompts;
