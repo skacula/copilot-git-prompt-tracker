@@ -4,11 +4,11 @@ import { ConfigurationManager } from './ConfigurationManager';
 
 export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
     public static readonly viewType = 'copilotPromptTracker.promptsView';
-    
+
     private _view?: vscode.WebviewView;
     private readonly _extensionUri: vscode.Uri;
     private _disposed = false;
-    
+
     constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly githubService: GitHubService,
@@ -71,7 +71,7 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
         try {
             const [owner, repo] = config.githubRepo.split('/');
             const prompts = await this.githubService.listPrompts(owner, repo, config.saveLocation);
-            
+
             this._view.webview.postMessage({
                 type: 'prompts',
                 data: prompts
@@ -103,11 +103,11 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
         try {
             const [owner, repo] = config.githubRepo.split('/');
             const prompts = await this.githubService.listPrompts(owner, repo, config.saveLocation);
-            
+
             if (promptIndex >= 0 && promptIndex < prompts.length) {
                 const prompt = prompts[promptIndex];
                 const details = this.formatPromptDetailsForWebview(prompt);
-                
+
                 this._view.webview.postMessage({
                     type: 'promptDetails',
                     index: promptIndex,
@@ -122,7 +122,7 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
     private formatPromptForDisplay(prompt: PromptEntry): string {
         // Extract clean prompts from session data
         const cleanPrompts = this.extractCleanPrompts(prompt.prompt);
-        
+
         return `# AI Prompt Session
 
 **🌿 Branch:** ${prompt.gitInfo.branch}
@@ -146,26 +146,26 @@ ${cleanPrompts}
             const lines = rawPrompt.split('\n');
             let extractedContent = '';
             let inInteractionSection = false;
-            
+
             for (const line of lines) {
                 if (line.includes('Copilot Interactions:') || line.includes('AI Interactions:')) {
                     inInteractionSection = true;
                     continue;
                 }
-                
+
                 if (inInteractionSection && line.trim()) {
                     extractedContent += line + '\n';
                 }
             }
-            
+
             return extractedContent.trim() || 'Legacy session data with no extracted prompts';
         }
-        
+
         // Handle new clean format
         const lines = rawPrompt.split('\n');
         let cleanPrompts = '';
         let currentInteraction = '';
-        
+
         for (const line of lines) {
             // Look for interaction markers
             const interactionMatch = line.match(/^\[(\d+)\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*(.+)$/);
@@ -180,11 +180,11 @@ ${cleanPrompts}
                 currentInteraction += '\n  ' + line;
             }
         }
-        
+
         if (currentInteraction) {
             cleanPrompts += currentInteraction;
         }
-        
+
         return cleanPrompts || 'No prompts found in session data';
     }
 
@@ -194,25 +194,25 @@ ${cleanPrompts}
             const lines = rawPrompt.split('\n');
             let extractedContent = '';
             let inInteractionSection = false;
-            
+
             for (const line of lines) {
                 if (line.includes('Copilot Interactions:') || line.includes('AI Interactions:')) {
                     inInteractionSection = true;
                     continue;
                 }
-                
+
                 if (inInteractionSection && line.trim()) {
                     extractedContent += this.parsePromptEntry(line) + '\n\n';
                 }
             }
-            
+
             return extractedContent.trim() || 'Legacy session data with no extracted prompts';
         }
-        
+
         // Handle new clean format
         const lines = rawPrompt.split('\n');
         let formattedPrompts = '';
-        
+
         for (const line of lines) {
             // Look for interaction markers
             const interactionMatch = line.match(/^\[(\d+)\]\s*(CHAT|INLINE|COMMENT|COMPLETION|GENERATION):\s*(.+)$/);
@@ -222,7 +222,7 @@ ${cleanPrompts}
                 formattedPrompts += parsedEntry + '\n\n';
             }
         }
-        
+
         return formattedPrompts.trim() || 'No prompts found in session data';
     }
 
@@ -232,18 +232,18 @@ ${cleanPrompts}
         if (jsonContent) {
             return this.formatJsonAsKeyValue(jsonContent, type, num);
         }
-        
+
         // Handle structured text content (like "Code generation in /path/file")
         const structuredData = this.parseStructuredContent(content, type, num);
         if (structuredData) {
             return structuredData;
         }
-        
+
         // Handle INLINE code generation without JSON (likely human modified)
         if (type === 'INLINE' && content.startsWith('Code generation')) {
             return this.formatInlineCodeGeneration(content, num);
         }
-        
+
         // Fallback to formatted display
         const header = type && num ? `**${num}. ${type}:**` : '**Prompt:**';
         return `${header}\n  Content: ${content}`;
@@ -260,13 +260,13 @@ ${cleanPrompts}
                     .replace(/\\"/g, '"')
                     .replace(/\\'/g, "'")
                     .replace(/\\\\/g, '\\');
-                
+
                 return JSON.parse(unescapedJson);
             } catch (error) {
                 // Continue to other methods if unescaping fails
             }
         }
-        
+
         // Look for regular JSON objects within the content
         const jsonMatch = content.match(/\{[\s\S]*?\}/);
         if (jsonMatch) {
@@ -276,23 +276,23 @@ ${cleanPrompts}
                 // JSON parsing failed, continue with other methods
             }
         }
-        
+
         // Look for JSON-like key:value patterns with quoted strings
         const quotedKeyValuePattern = /"(\w+)":\s*"([^"]+)"/g;
         let match;
         const jsonLike: any = {};
         let hasMatches = false;
-        
+
         while ((match = quotedKeyValuePattern.exec(content)) !== null) {
             const [, key, value] = match;
             jsonLike[key] = value.trim();
             hasMatches = true;
         }
-        
+
         if (hasMatches) {
             return jsonLike;
         }
-        
+
         // Look for unquoted JSON-like key:value patterns
         const keyValuePattern = /(\w+):\s*([^,}\n]+)/g;
         while ((match = keyValuePattern.exec(content)) !== null) {
@@ -300,14 +300,14 @@ ${cleanPrompts}
             jsonLike[key] = value.trim().replace(/^["']|["']$/g, ''); // Remove surrounding quotes
             hasMatches = true;
         }
-        
+
         return hasMatches ? jsonLike : null;
     }
 
     private formatJsonAsKeyValue(jsonData: any, type?: string, num?: string): string {
         const header = type && num ? `**${num}. ${type}:**` : '**Prompt:**';
         let formatted = header + '\n';
-        
+
         for (const [key, value] of Object.entries(jsonData)) {
             // Handle nested objects and arrays
             if (typeof value === 'object' && value !== null) {
@@ -316,7 +316,7 @@ ${cleanPrompts}
                 formatted += `  ${key}: ${value}\n`;
             }
         }
-        
+
         return formatted.trim();
     }
 
@@ -327,33 +327,33 @@ ${cleanPrompts}
             const header = type && num ? `**${num}. ${type}:**` : '**Code Generation:**';
             return `${header}\n  Action: Code generation\n  File: ${codeGenMatch[1]}`;
         }
-        
+
         // Parse "Code completion for: something" format
         const codeCompletionMatch = content.match(/^Code completion for:\s*(.+)$/);
         if (codeCompletionMatch) {
             const header = type && num ? `**${num}. ${type}:**` : '**Code Completion:**';
             return `${header}\n  Action: Code completion\n  Context: ${codeCompletionMatch[1]}`;
         }
-        
+
         // Parse other structured patterns as needed
         return null;
     }
 
     private formatInlineCodeGeneration(content: string, num?: string): string {
         const header = num ? `**${num}. INLINE:**` : '**INLINE:**';
-        
+
         // Extract file path if present
         const fileMatch = content.match(/in (.+)$/);
         if (fileMatch) {
             return `${header}\n  Type: Code generation\n  File: ${fileMatch[1]}\n  Note: Human-modified content (no JSON data)`;
         }
-        
+
         return `${header}\n  Type: Code generation\n  Content: ${content}\n  Note: Human-modified content (no JSON data)`;
     }
 
     private formatPromptDetailsForWebview(prompt: PromptEntry): any {
         const parsedPrompts = this.parseAndFormatPrompts(prompt.prompt);
-        
+
         return {
             branch: prompt.gitInfo.branch,
             commit: prompt.gitInfo.commitHash,
@@ -558,6 +558,22 @@ ${cleanPrompts}
                         text-decoration: underline;
                     }
                     
+                    .commits-section {
+                        margin-top: 8px;
+                    }
+                    
+                    .section-title {
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: var(--vscode-foreground);
+                        margin-bottom: 12px;
+                        padding-bottom: 6px;
+                        border-bottom: 1px solid var(--vscode-panel-border);
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    
                     .empty-state {
                         text-align: center;
                         padding: 40px 20px;
@@ -739,9 +755,14 @@ ${cleanPrompts}
                         
                         if (prompts.length === 0) {
                             content.innerHTML = \`
-                                <div class="empty-state">
-                                    <p>No prompts found.</p>
-                                    <p>Start using AI assistants and save your prompts!</p>
+                                <div class="commits-section">
+                                    <div class="section-title">
+                                        📝 Commits with AI Prompts
+                                    </div>
+                                    <div class="empty-state">
+                                        <p>No commits with AI prompts found.</p>
+                                        <p>Start using AI assistants and save your prompts!</p>
+                                    </div>
                                 </div>
                             \`;
                             return;
@@ -765,7 +786,14 @@ ${cleanPrompts}
                             </div>
                         \`).join('');
                         
-                        content.innerHTML = \`<div class="prompt-list">\${promptsHtml}</div>\`;
+                        content.innerHTML = \`
+                            <div class="commits-section">
+                                <div class="section-title">
+                                    📝 Commits with AI Prompts
+                                </div>
+                                <div class="prompt-list">\${promptsHtml}</div>
+                            </div>
+                        \`;
                         
                         // Add event listeners for expand buttons
                         addExpandButtonListeners();
