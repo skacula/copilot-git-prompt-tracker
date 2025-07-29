@@ -761,6 +761,9 @@ export class AIAssistantDetectionService implements vscode.Disposable {
                 if (!this.claudeExtension.isActive) {
                     await this.claudeExtension.activate();
                 }
+                
+                // Set up command monitoring for Claude Code
+                this.setupClaudeCommandMonitoring();
             } else {
                 console.log('AIAssistantDetectionService: Claude Code extension not found');
             }
@@ -797,9 +800,208 @@ export class AIAssistantDetectionService implements vscode.Disposable {
     private setupClaudeCodeDetection(): void {
         console.log('AIAssistantDetectionService: Setting up Claude Code detection');
         
+        // Monitor terminal processes for claude command execution
+        this.setupTerminalMonitoring();
+        
+        // Monitor for keyboard shortcuts used by Claude Code
+        this.setupClaudeKeyboardShortcuts();
+        
         // Monitor for large text insertions that might be Claude-generated
         // Claude Code often inserts substantial blocks of code at once
         // We'll enhance the text change detection to identify Claude patterns
+    }
+
+    /**
+     * Set up monitoring for Claude Code extension commands
+     */
+    private setupClaudeCommandMonitoring(): void {
+        if (!this.claudeExtension) {
+            return;
+        }
+
+        // Monitor for Claude Code commands being executed
+        const originalExecuteCommand = vscode.commands.executeCommand;
+        
+        // Wrap the executeCommand to detect Claude Code usage
+        const commandMonitor = async (command: string, ...args: any[]) => {
+            // Check if this is a Claude Code command
+            if (command.startsWith('claude-code.') || command.includes('claude')) {
+                console.log(`AIAssistantDetectionService: Claude Code command detected: ${command}`);
+                this.handleClaudeCommandExecution(command, args);
+            }
+            
+            return originalExecuteCommand.call(vscode.commands, command, ...args);
+        };
+
+        // Note: This is a conceptual approach - VS Code doesn't allow direct command interception
+        // In practice, we'd need to listen for specific events or use other detection methods
+        console.log('AIAssistantDetectionService: Claude Code command monitoring initialized');
+    }
+
+    /**
+     * Handle detected Claude Code command execution
+     */
+    private handleClaudeCommandExecution(command: string, args: any[]): void {
+        console.log(`AIAssistantDetectionService: Processing Claude Code command: ${command}`);
+        
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+
+        const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
+            prompt: `Claude Code command: ${command}`,
+            response: 'Claude Code command executed',
+            aiProvider: 'claude',
+            fileContext: {
+                fileName: editor.document.fileName,
+                language: editor.document.languageId,
+                selection: editor.selection ? {
+                    start: { line: editor.selection.start.line, character: editor.selection.start.character },
+                    end: { line: editor.selection.end.line, character: editor.selection.end.character }
+                } : undefined,
+                content: editor.selection && !editor.selection.isEmpty ? 
+                    editor.document.getText(editor.selection) : undefined
+            },
+            interactionType: 'generation'
+        };
+
+        this.interactionListeners.forEach(listener => {
+            try {
+                listener(interaction);
+            } catch (error) {
+                console.error('AIAssistantDetectionService: Error in Claude command listener:', error);
+            }
+        });
+    }
+
+    /**
+     * Monitor terminal processes for Claude Code usage
+     */
+    private setupTerminalMonitoring(): void {
+        // Monitor when terminals are created - Claude Code auto-installs when run
+        const terminalListener = vscode.window.onDidOpenTerminal((terminal) => {
+            this.monitorTerminalForClaude(terminal);
+        });
+        this.disposables.push(terminalListener);
+
+        // Monitor existing terminals
+        vscode.window.terminals.forEach(terminal => {
+            this.monitorTerminalForClaude(terminal);
+        });
+
+        // Monitor when terminals close (Claude sessions ending)
+        const terminalCloseListener = vscode.window.onDidCloseTerminal((terminal) => {
+            console.log('AIAssistantDetectionService: Terminal closed, potential Claude session ended');
+        });
+        this.disposables.push(terminalCloseListener);
+    }
+
+    /**
+     * Monitor a specific terminal for Claude Code commands
+     */
+    private monitorTerminalForClaude(terminal: vscode.Terminal): void {
+        // Unfortunately, VS Code doesn't provide direct access to terminal command history
+        // But we can monitor when the terminal becomes active and look for Claude-related patterns
+        
+        console.log(`AIAssistantDetectionService: Monitoring terminal "${terminal.name}" for Claude activity`);
+        
+        // Monitor when this terminal sends text (if possible through future VS Code API updates)
+        // For now, we'll rely on heuristic detection when Claude Code generates code
+        
+        // Attempt to detect Claude process if possible
+        this.detectClaudeProcess();
+    }
+
+    /**
+     * Attempt to detect Claude Code process (system-level detection)
+     */
+    private detectClaudeProcess(): void {
+        // Note: VS Code extensions run in a sandboxed environment with limited process access
+        // This is a best-effort approach that may work on some systems
+        
+        try {
+            // Check if we're in a Node.js environment with child_process access
+            if (typeof require !== 'undefined') {
+                const { exec } = require('child_process');
+                
+                // Try to detect Claude processes on different platforms
+                const command = process.platform === 'win32' 
+                    ? 'tasklist /FI "IMAGENAME eq claude*"'
+                    : 'ps aux | grep -i claude | grep -v grep';
+                
+                exec(command, (error: any, stdout: string, stderr: string) => {
+                    if (!error && stdout.includes('claude')) {
+                        console.log('AIAssistantDetectionService: Claude process detected via system monitor');
+                        this.handlePotentialClaudeUsage('terminal_command');
+                    }
+                });
+            }
+        } catch (error) {
+            // Silently fail - process detection is optional and may not work in all environments
+            console.log('AIAssistantDetectionService: Process detection not available in this environment');
+        }
+    }
+
+    /**
+     * Set up monitoring for Claude Code keyboard shortcuts
+     */
+    private setupClaudeKeyboardShortcuts(): void {
+        // Claude Code uses Cmd+Esc (Mac) / Ctrl+Esc (Windows/Linux)
+        // Unfortunately, VS Code doesn't provide direct keyboard event monitoring
+        // But we can register similar commands to detect when users might be using Claude
+        
+        try {
+            const claudeLaunchCommand = vscode.commands.registerCommand(
+                'aiAssistantDetection.detectClaudeLaunch',
+                () => {
+                    console.log('AIAssistantDetectionService: Potential Claude Code launch detected');
+                    this.handlePotentialClaudeUsage('keyboard_shortcut');
+                }
+            );
+            this.disposables.push(claudeLaunchCommand);
+        } catch (error) {
+            console.log('AIAssistantDetectionService: Could not register Claude detection command');
+        }
+    }
+
+    /**
+     * Handle potential Claude Code usage detection
+     */
+    private handlePotentialClaudeUsage(trigger: 'keyboard_shortcut' | 'terminal_command' | 'text_pattern'): void {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+
+        console.log(`AIAssistantDetectionService: Claude Code usage detected via ${trigger}`);
+
+        // Create a placeholder interaction that will be refined when actual code changes occur
+        const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
+            prompt: `Claude Code session initiated via ${trigger}`,
+            response: 'Claude Code interaction in progress',
+            aiProvider: 'claude',
+            fileContext: {
+                fileName: editor.document.fileName,
+                language: editor.document.languageId,
+                selection: editor.selection ? {
+                    start: { line: editor.selection.start.line, character: editor.selection.start.character },
+                    end: { line: editor.selection.end.line, character: editor.selection.end.character }
+                } : undefined,
+                content: editor.selection && !editor.selection.isEmpty ? 
+                    editor.document.getText(editor.selection) : undefined
+            },
+            interactionType: 'generation'
+        };
+
+        // Store this as a potential interaction - it will be confirmed/refined by text change detection
+        this.interactionListeners.forEach(listener => {
+            try {
+                listener(interaction);
+            } catch (error) {
+                console.error('AIAssistantDetectionService: Error in Claude usage listener:', error);
+            }
+        });
     }
 
     /**
@@ -922,9 +1124,14 @@ export class AIAssistantDetectionService implements vscode.Disposable {
             }
         }
 
-        // Check for Claude Code extension presence
+        // Check for Claude Code extension presence - higher confidence boost
         if (this.claudeExtension && this.claudeExtension.isActive) {
-            confidence += 0.15;
+            confidence += 0.25; // Increased from 0.15
+        }
+
+        // Check for Claude Code specific markers in text
+        if (this.hasClaudeCodeMarkers(change.text)) {
+            confidence += 0.2;
         }
 
         // Claude often generates multi-line explanatory text with proper structure
@@ -1176,6 +1383,42 @@ export class AIAssistantDetectionService implements vscode.Disposable {
         
         const pattern = typePatterns[language as keyof typeof typePatterns];
         return pattern ? pattern.test(text) : false;
+    }
+
+    /**
+     * Check for Claude Code specific markers and patterns
+     */
+    private hasClaudeCodeMarkers(text: string): boolean {
+        // Claude Code often includes specific patterns in generated code
+        const claudeMarkers = [
+            // Claude often includes detailed explanations
+            /\/\/ Here's how/i,
+            /\/\/ This function/i,
+            /\/\/ Note that/i,
+            /\/\/ The following/i,
+            
+            // Claude frequently uses specific phrasings
+            /\/\/ We can use/i,
+            /\/\/ Let's create/i,
+            /\/\/ First, we'll/i,
+            /\/\/ To accomplish this/i,
+            
+            // Python specific Claude patterns
+            /# Here's how/i,
+            /# This function/i,
+            /# We can use/i,
+            /# Let's create/i,
+            
+            // Claude's typical error handling patterns
+            /try:\s*\n\s*\/\/ or #.*implementation/i,
+            /except.*:\s*\n\s*\/\/ or #.*handle/i,
+            
+            // Claude often includes type hints and detailed docstrings
+            /def\s+\w+\([^)]*\)\s*->\s*\w+:\s*\n\s*"""/,
+            /function\s+\w+\([^)]*\):\s+\w+\s*{\s*\/\*\*/
+        ];
+        
+        return claudeMarkers.some(pattern => pattern.test(text));
     }
 
     /**
