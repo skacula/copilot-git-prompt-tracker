@@ -103,7 +103,17 @@ export class AISessionMonitor {
             this.currentSession!.interactions = this.currentSession!.interactions.slice(-this.MAX_INTERACTIONS_PER_SESSION);
         }
 
-        console.log(`AISessionMonitor: Added ${provider} interaction ${fullInteraction.id} to session ${this.currentSession!.sessionId}`);
+        console.log(`✅ AISessionMonitor: Added ${provider.toUpperCase()} interaction ${fullInteraction.id} to session ${this.currentSession!.sessionId}`);
+        console.log(`📊 Session stats: ${this.currentSession!.interactions.length} total interactions, providers: [${this.currentSession!.metadata.aiProvidersUsed.join(', ')}]`);
+        
+        // Special logging for Claude interactions
+        if (provider === 'claude') {
+            console.log(`🧠 CLAUDE INTERACTION CAPTURED:`);
+            console.log(`   - Type: ${interaction.interactionType}`);
+            console.log(`   - Prompt: ${interaction.prompt.substring(0, 100)}...`);
+            console.log(`   - File: ${interaction.fileContext?.fileName || 'none'}`);
+            console.log(`   - Response length: ${interaction.response?.length || 0} chars`);
+        }
     }
 
     /**

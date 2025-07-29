@@ -163,7 +163,7 @@ export class AIAssistantDetectionService implements vscode.Disposable {
     }
 
     /**
-     * Analyze text changes to detect potential Copilot completions
+     * Analyze text changes to detect potential AI assistant interactions
      */
     private async analyzeTextChanges(event: vscode.TextDocumentChangeEvent): Promise<void> {
         const document = event.document;
@@ -172,15 +172,34 @@ export class AIAssistantDetectionService implements vscode.Disposable {
         for (const change of event.contentChanges) {
             // Only analyze substantial text changes
             if (change.text.length > 10) {
-                console.log(`📝 Analyzing text change: ${change.text.length} chars in ${document.languageId}`);
+                console.log(`📝 ANALYZING TEXT CHANGE: ${change.text.length} chars in ${document.languageId} (${document.fileName})`);
+                console.log(`📝 Change preview: "${change.text.substring(0, 100).replace(/\n/g, '\\n')}..."`);
+                
                 const detectionResults = this.detectAIInteractions(change, document);
                 
+                console.log(`📝 Detection results: ${detectionResults.length} providers checked`);
                 for (const detectionResult of detectionResults) {
-                    console.log(`🔍 ${detectionResult.aiProvider}: confidence=${Math.round(detectionResult.confidence * 100)}%, detected=${detectionResult.detected}`);
+                    console.log(`🔍 ${detectionResult.aiProvider.toUpperCase()}: confidence=${Math.round(detectionResult.confidence * 100)}%, detected=${detectionResult.detected}, type=${detectionResult.interactionType}`);
                     
                     if (detectionResult.detected && detectionResult.confidence > 0.5) {
+                        console.log(`✅ CAPTURING ${detectionResult.aiProvider.toUpperCase()} INTERACTION`);
                         await this.captureAIInteraction(change, document, detectionResult);
+                    } else if (detectionResult.aiProvider === 'claude' && detectionResult.confidence > 0.3) {
+                        // Special logging for Claude near-misses
+                        console.log(`⚠️ CLAUDE NEAR-MISS: confidence=${Math.round(detectionResult.confidence * 100)}% (threshold=50%)`);
+                        console.log(`⚠️ Claude characteristics check:`);
+                        console.log(`   - Length > 200: ${change.text.length > 200}`);
+                        console.log(`   - Lines > 10: ${change.text.split('\n').length > 10}`);
+                        console.log(`   - Has comments: ${this.hasThoughtfulComments(change.text, document.languageId)}`);
+                        console.log(`   - Complete function: ${this.isCompleteFunction(change.text, document.languageId)}`);
+                        console.log(`   - Has error handling: ${this.hasErrorHandling(change.text, document.languageId)}`);
+                        console.log(`   - Claude markers: ${this.hasClaudeCodeMarkers(change.text)}`);
+                        console.log(`   - Verbose code: ${this.isVerboseCode(change.text)}`);
                     }
+                }
+                
+                if (detectionResults.length === 0 || !detectionResults.some(r => r.detected)) {
+                    console.log(`🔍 NO AI DETECTED for ${change.text.length} char change in ${document.languageId}`);
                 }
             }
 
@@ -747,28 +766,30 @@ export class AIAssistantDetectionService implements vscode.Disposable {
     }
 
     /**
-     * Initialize integration with Claude Code extension
+     * Initialize integration with Claude Code (binary-based, not VS Code extension)
      */
     private async initializeClaudeExtension(): Promise<void> {
         try {
-            // Check for Claude Code extension (you may need to adjust the exact ID)
-            this.claudeExtension = vscode.extensions.getExtension('anthropic.claude-code') ||
-                                   vscode.extensions.getExtension('anthropic.claude') ||
-                                   vscode.extensions.getExtension('claude.code');
+            // Claude Code is not a VS Code extension - it's a standalone binary
+            // Instead, we'll detect its presence and set up monitoring for its interactions
+            console.log('AIAssistantDetectionService: Initializing Claude Code detection (binary-based)');
             
-            if (this.claudeExtension) {
-                console.log('AIAssistantDetectionService: Claude Code extension detected');
-                if (!this.claudeExtension.isActive) {
-                    await this.claudeExtension.activate();
-                }
+            // Check if Claude Code binary might be available
+            const isClaudeAvailable = await this.checkClaudeCodeAvailability();
+            if (isClaudeAvailable) {
+                console.log('AIAssistantDetectionService: Claude Code binary detected');
+                this.claudeExtension = { isActive: true } as any; // Mock extension object for compatibility
                 
-                // Set up command monitoring for Claude Code
-                this.setupClaudeCommandMonitoring();
+                // Set up enhanced file system monitoring for Claude Code
+                this.setupClaudeFileSystemMonitoring();
+                
+                // Set up process monitoring
+                this.setupClaudeProcessMonitoring();
             } else {
-                console.log('AIAssistantDetectionService: Claude Code extension not found');
+                console.log('AIAssistantDetectionService: Claude Code binary not found or not accessible');
             }
         } catch (error) {
-            console.error('AIAssistantDetectionService: Error initializing Claude extension:', error);
+            console.error('AIAssistantDetectionService: Error initializing Claude detection:', error);
         }
     }
 
@@ -914,6 +935,209 @@ export class AIAssistantDetectionService implements vscode.Disposable {
     }
 
     /**
+     * Check if Claude Code binary is available on the system
+     */
+    private async checkClaudeCodeAvailability(): Promise<boolean> {
+        try {
+            // Check if we're in a Node.js environment with child_process access
+            if (typeof require !== 'undefined') {
+                const { exec } = require('child_process');
+                const { promisify } = require('util');
+                const execAsync = promisify(exec);
+                
+                try {
+                    // Try to run claude --version or which claude
+                    const command = process.platform === 'win32' ? 'where claude' : 'which claude';
+                    await execAsync(command);
+                    return true;
+                } catch {
+                    // Claude binary not found in PATH, but it might still be installed
+                    console.log('AIAssistantDetectionService: Claude binary not found in PATH');
+                    return false;
+                }
+            }
+            return false;
+        } catch (error) {
+            console.log('AIAssistantDetectionService: Cannot check Claude availability:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Set up enhanced file system monitoring specifically for Claude Code
+     */
+    private setupClaudeFileSystemMonitoring(): void {
+        console.log('AIAssistantDetectionService: Setting up Claude Code file system monitoring');
+        
+        // Monitor for rapid file changes that are characteristic of Claude Code
+        const fileSystemWatcher = vscode.workspace.onDidChangeTextDocument((event) => {
+            // Claude Code often makes large, instantaneous changes to files
+            this.analyzeForClaudeCodePatterns(event);
+        });
+        
+        this.disposables.push(fileSystemWatcher);
+        
+        // Monitor when files are saved (Claude often auto-saves after generation)
+        const saveListener = vscode.workspace.onDidSaveTextDocument((document) => {
+            this.checkForClaudeCodeSavePattern(document);
+        });
+        
+        this.disposables.push(saveListener);
+    }
+
+    /**
+     * Set up process monitoring for Claude Code
+     */
+    private setupClaudeProcessMonitoring(): void {
+        console.log('AIAssistantDetectionService: Setting up Claude Code process monitoring');
+        
+        // Set up periodic process monitoring
+        const processCheckInterval = setInterval(() => {
+            this.detectClaudeProcess();
+        }, 5000); // Check every 5 seconds
+        
+        this.disposables.push({
+            dispose: () => clearInterval(processCheckInterval)
+        });
+    }
+
+    /**
+     * Analyze text changes for Claude Code specific patterns
+     */
+    private analyzeForClaudeCodePatterns(event: vscode.TextDocumentChangeEvent): void {
+        for (const change of event.contentChanges) {
+            // Claude Code characteristics:
+            // 1. Large blocks of text inserted instantly
+            // 2. Well-formatted, complete functions/classes
+            // 3. Often includes detailed comments
+            // 4. May include multiple files being modified simultaneously
+            
+            if (change.text.length > 100 && change.rangeLength === 0) {
+                const claudeConfidence = this.calculateClaudeCodeConfidence(change.text, event.document);
+                
+                if (claudeConfidence > 0.6) {
+                    console.log(`🧠 Claude Code pattern detected with confidence: ${Math.round(claudeConfidence * 100)}%`);
+                    
+                    // Create a Claude-specific interaction
+                    const interaction: Omit<AIInteraction, 'id' | 'timestamp'> = {
+                        prompt: this.inferClaudeCodePrompt(change.text, event.document),
+                        response: change.text,
+                        aiProvider: 'claude',
+                        fileContext: {
+                            fileName: event.document.fileName,
+                            language: event.document.languageId,
+                            selection: change.range ? {
+                                start: { line: change.range.start.line, character: change.range.start.character },
+                                end: { line: change.range.end.line, character: change.range.end.character }
+                            } : undefined,
+                            content: change.text
+                        },
+                        interactionType: 'generation'
+                    };
+                    
+                    this.notifyInteractionListeners(interaction);
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculate confidence that a text change was generated by Claude Code
+     */
+    private calculateClaudeCodeConfidence(text: string, document: vscode.TextDocument): number {
+        let confidence = 0;
+        
+        // Claude Code characteristics
+        
+        // 1. Large, complete code blocks
+        if (text.length > 200) {
+            confidence += 0.2;
+        }
+        
+        // 2. Multiple lines with proper structure
+        const lines = text.split('\n');
+        if (lines.length > 10) {
+            confidence += 0.15;
+        }
+        
+        // 3. Detailed comments and documentation
+        if (this.hasThoughtfulComments(text, document.languageId)) {
+            confidence += 0.25;
+        }
+        
+        // 4. Complete functions with proper error handling
+        if (this.isCompleteFunction(text, document.languageId) && this.hasErrorHandling(text, document.languageId)) {
+            confidence += 0.2;
+        }
+        
+        // 5. Type annotations and modern patterns
+        if (this.hasTypeAnnotations(text, document.languageId)) {
+            confidence += 0.1;
+        }
+        
+        // 6. Claude-specific markers
+        if (this.hasClaudeCodeMarkers(text)) {
+            confidence += 0.15;
+        }
+        
+        // 7. Verbose, explanatory style
+        if (this.isVerboseCode(text)) {
+            confidence += 0.1;
+        }
+        
+        return Math.min(confidence, 1.0);
+    }
+
+    /**
+     * Infer what prompt might have generated this Claude Code
+     */
+    private inferClaudeCodePrompt(generatedText: string, document: vscode.TextDocument): string {
+        // Analyze the generated content to infer the likely prompt
+        
+        if (this.isCompleteFunction(generatedText, document.languageId)) {
+            if (this.hasThoughtfulComments(generatedText, document.languageId)) {
+                return `Write a complete, well-documented function for ${document.fileName}`;
+            }
+            return `Implement a function in ${document.fileName}`;
+        }
+        
+        if (generatedText.includes('class ') || generatedText.includes('interface ')) {
+            return `Create a class/interface implementation for ${document.fileName}`;
+        }
+        
+        if (this.hasErrorHandling(generatedText, document.languageId)) {
+            return `Write robust code with error handling for ${document.fileName}`;
+        }
+        
+        if (generatedText.split('\n').length > 20) {
+            return `Generate a comprehensive code solution for ${document.fileName}`;
+        }
+        
+        return `Claude Code generation for ${document.fileName}`;
+    }
+
+    /**
+     * Check for save patterns typical of Claude Code
+     */
+    private checkForClaudeCodeSavePattern(document: vscode.TextDocument): void {
+        // Claude Code often saves files after making changes
+        // Look for recent large changes that might indicate Claude involvement
+        
+        const documentUri = document.uri.toString();
+        const recentChanges = Array.from(this.recentTextChanges.values())
+            .filter(change => Date.now() - change.timestamp < 2000); // Within last 2 seconds
+        
+        if (recentChanges.length > 0) {
+            const totalChanges = recentChanges.reduce((sum, change) => sum + change.change.text.length, 0);
+            
+            if (totalChanges > 200) {
+                console.log('AIAssistantDetectionService: Claude Code save pattern detected');
+                // This reinforces our confidence in recent Claude detections
+            }
+        }
+    }
+
+    /**
      * Attempt to detect Claude Code process (system-level detection)
      */
     private detectClaudeProcess(): void {
@@ -941,6 +1165,19 @@ export class AIAssistantDetectionService implements vscode.Disposable {
             // Silently fail - process detection is optional and may not work in all environments
             console.log('AIAssistantDetectionService: Process detection not available in this environment');
         }
+    }
+
+    /**
+     * Notify all interaction listeners about a detected interaction
+     */
+    private notifyInteractionListeners(interaction: Omit<AIInteraction, 'id' | 'timestamp'>): void {
+        this.interactionListeners.forEach(listener => {
+            try {
+                listener(interaction);
+            } catch (error) {
+                console.error('AIAssistantDetectionService: Error in interaction listener:', error);
+            }
+        });
     }
 
     /**
@@ -1090,88 +1327,26 @@ export class AIAssistantDetectionService implements vscode.Disposable {
         change: vscode.TextDocumentContentChangeEvent,
         document: vscode.TextDocument
     ): AIDetectionResult {
-        let confidence = 0;
+        // Use the enhanced Claude-specific confidence calculation
+        const confidence = this.calculateClaudeCodeConfidence(change.text, document);
         let interactionType: 'chat' | 'inline' | 'comment' | 'completion' | 'generation' = 'generation';
 
-        // Claude Code typically generates substantial blocks of code
-        if (change.text.length > 50 && change.rangeLength === 0) {
-            confidence += 0.25;
-            
-            // Extra confidence for very large blocks typical of Claude
-            if (change.text.length > 200) {
-                confidence += 0.15;
-            }
-            
-            // Even higher confidence for massive blocks (Claude's specialty)
-            if (change.text.length > 500) {
-                confidence += 0.15;
-            }
-        }
-
-        // Claude often includes thoughtful comments with explanations
+        // Determine interaction type based on content characteristics
         if (this.hasThoughtfulComments(change.text, document.languageId)) {
-            confidence += 0.3;
             interactionType = 'comment';
+        } else if (change.text.length < 50) {
+            interactionType = 'completion';
+        } else if (this.isCompleteFunction(change.text, document.languageId)) {
+            interactionType = 'generation';
         }
 
-        // Claude tends to generate complete, well-structured functions/methods
-        if (this.isCompleteFunction(change.text, document.languageId)) {
-            confidence += 0.25;
-            
-            // Extra points for functions with docstrings/JSDoc
-            if (this.hasDocumentation(change.text, document.languageId)) {
-                confidence += 0.1;
-            }
-        }
-
-        // Check for Claude Code extension presence - higher confidence boost
-        if (this.claudeExtension && this.claudeExtension.isActive) {
-            confidence += 0.25; // Increased from 0.15
-        }
-
-        // Check for Claude Code specific markers in text
-        if (this.hasClaudeCodeMarkers(change.text)) {
-            confidence += 0.2;
-        }
-
-        // Claude often generates multi-line explanatory text with proper structure
-        const lines = change.text.split('\n');
-        if (lines.length > 5) {
-            confidence += 0.15;
-            
-            // Claude tends to use consistent indentation
-            if (this.hasConsistentIndentation(lines)) {
-                confidence += 0.1;
-            }
-        }
-
-        // Claude frequently includes error handling
-        if (this.hasErrorHandling(change.text, document.languageId)) {
-            confidence += 0.1;
-        }
-
-        // Claude often adds type annotations (TypeScript/Python)
-        if (this.hasTypeAnnotations(change.text, document.languageId)) {
-            confidence += 0.1;
-        }
-
-        // Claude typically generates more verbose, explanatory code
-        if (this.isVerboseCode(change.text)) {
-            confidence += 0.1;
-        }
-
-        // Instant insertion pattern (not typed gradually)
-        const documentUri = document.uri.toString();
-        const typingSpeed = this.getRecentTypingSpeed(documentUri);
-        if (typingSpeed === 0 && change.text.length > 100) {
-            confidence += 0.15; // Large instant insertions are likely AI
-        }
-
-        // Lower threshold for Claude detection since it has distinct patterns
-        const detected = confidence > 0.45;
+        // Claude Code uses a lower threshold since it has very distinct patterns
+        const detected = confidence > 0.5;
         
         if (detected) {
-            console.log(`🧠 Claude pattern detected: length=${change.text.length}, lines=${lines.length}, confidence=${Math.round(confidence * 100)}%`);
+            const lines = change.text.split('\n');
+            console.log(`🧠 CLAUDE CODE DETECTED: length=${change.text.length}, lines=${lines.length}, confidence=${Math.round(confidence * 100)}%, type=${interactionType}`);
+            console.log(`🧠 Claude content preview: ${change.text.substring(0, 150).replace(/\n/g, '\\n')}...`);
         }
 
         return {
