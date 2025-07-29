@@ -44,6 +44,16 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
                     case 'togglePrompt':
                         this.sendPromptDetails(message.promptIndex, message.expanded);
                         break;
+                    case 'fallbackRefresh':
+                        // User's webview is stuck in loading, retry
+                        this.refreshPrompts();
+                        break;
+                    case 'saveChat':
+                        vscode.commands.executeCommand('copilotPromptTracker.saveChatConversation');
+                        break;
+                    case 'quickSaveChat':
+                        vscode.commands.executeCommand('copilotPromptTracker.quickSaveChat');
+                        break;
                 }
             },
             undefined,
@@ -52,12 +62,28 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
 
         // Load prompts when view is created
         this.refreshPrompts();
+
+        // Add a fallback retry mechanism in case the initial load fails silently
+        setTimeout(() => {
+            if (this._view && !this._disposed) {
+                // Check if content is still in loading state
+                this._view.webview.postMessage({
+                    type: 'checkLoadingState'
+                });
+            }
+        }, 5000); // Check after 5 seconds
     }
 
     private async refreshPrompts() {
         if (!this._view || this._disposed) {
             return;
         }
+
+        // Set loading state immediately
+        this._view.webview.postMessage({
+            type: 'loading',
+            message: 'Loading prompts...'
+        });
 
         const config = this.configManager.getConfiguration();
         if (!config.githubRepo) {
@@ -70,7 +96,15 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
 
         try {
             const [owner, repo] = config.githubRepo.split('/');
-            const prompts = await this.githubService.listPrompts(owner, repo, config.saveLocation);
+
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Request timed out')), 30000); // 30 second timeout
+            });
+
+            const promptsPromise = this.githubService.listPrompts(owner, repo, config.saveLocation);
+
+            const prompts = await Promise.race([promptsPromise, timeoutPromise]) as PromptEntry[];
 
             this._view.webview.postMessage({
                 type: 'prompts',
@@ -78,14 +112,26 @@ export class PromptViewProvider implements vscode.WebviewViewProvider, vscode.Di
             });
         } catch (error) {
             console.error('Failed to load prompts:', error);
+
+            let errorMessage = 'Failed to load prompts. Please check your configuration.';
+            if (error instanceof Error) {
+                if (error.message.includes('timed out')) {
+                    errorMessage = 'Request timed out. Please check your network connection and try again.';
+                } else if (error.message.includes('rate limit')) {
+                    errorMessage = 'GitHub API rate limit exceeded. Please try again later.';
+                } else if (error.message.includes('Not Found') || error.message.includes('404')) {
+                    errorMessage = 'Repository not found. Please check your GitHub repository configuration.';
+                } else if (error.message.includes('Unauthorized') || error.message.includes('401')) {
+                    errorMessage = 'GitHub authentication failed. Please check your GitHub token.';
+                }
+            }
+
             this._view.webview.postMessage({
                 type: 'error',
-                message: 'Failed to load prompts. Please check your configuration.'
+                message: errorMessage
             });
         }
-    }
-
-    private async sendPromptDetails(promptIndex: number, expanded: boolean) {
+    } private async sendPromptDetails(promptIndex: number, expanded: boolean) {
         if (!this._view || this._disposed) {
             return;
         }
@@ -354,6 +400,12 @@ ${cleanPrompts}
     private formatPromptDetailsForWebview(prompt: PromptEntry): any {
         const parsedPrompts = this.parseAndFormatPrompts(prompt.prompt);
 
+        // Handle conversation array if present
+        let conversationHtml = '';
+        if (prompt.conversation && Array.isArray(prompt.conversation)) {
+            conversationHtml = this.formatConversationForWebview(prompt.conversation);
+        }
+
         return {
             branch: prompt.gitInfo.branch,
             commit: prompt.gitInfo.commitHash,
@@ -361,8 +413,25 @@ ${cleanPrompts}
             timestamp: new Date(prompt.timestamp).toLocaleString(),
             files: prompt.gitInfo.changedFiles,
             prompts: parsedPrompts,
-            response: prompt.response
+            response: prompt.response,
+            conversation: conversationHtml
         };
+    }
+
+    private formatConversationForWebview(conversation: any[]): string {
+        if (!conversation || conversation.length === 0) {
+            return '';
+        }
+
+        return conversation.map((turn, index) => {
+            const turnNumber = index + 1;
+            const icon = turn.type === 'user' ? '👤' : '🤖';
+            const timestamp = new Date(turn.timestamp).toLocaleTimeString();
+
+            return `**${icon} Turn ${turnNumber}** (${timestamp})
+**Prompt:** ${turn.prompt}
+**Response:** ${turn.response}`;
+        }).join('\n\n---\n\n');
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
@@ -591,12 +660,34 @@ ${cleanPrompts}
                         text-align: center;
                         padding: 20px;
                     }
+                    
+                    .conversation-section {
+                        margin-bottom: 16px;
+                    }
+                    
+                    .conversation-content {
+                        background-color: var(--vscode-textCodeBlock-background);
+                        padding: 16px;
+                        border-radius: 6px;
+                        border-left: 3px solid var(--vscode-charts-blue);
+                        margin-bottom: 12px;
+                        white-space: pre-wrap;
+                        word-break: break-word;
+                        line-height: 1.6;
+                        font-family: var(--vscode-editor-font-family);
+                    }
+                    
+                    .prompts-section {
+                        margin-bottom: 16px;
+                    }
                 </style>
             </head>
             <body>
                 <div class="header">
                     <div class="title">🤖 AI Prompts</div>
                     <div class="actions">
+                        <button id="save-chat-button" class="secondary-button">💬 Save Chat</button>
+                        <button id="quick-save-button" class="secondary-button">⚡ Quick Save</button>
                         <button id="refresh-button" class="secondary-button">↻ Refresh</button>
                         <button id="configure-button">⚙️ Configure</button>
                     </div>
@@ -611,9 +702,19 @@ ${cleanPrompts}
                     
                     // Add event listeners when DOM is loaded
                     document.addEventListener('DOMContentLoaded', function() {
+                        document.getElementById('save-chat-button').addEventListener('click', saveChat);
+                        document.getElementById('quick-save-button').addEventListener('click', quickSaveChat);
                         document.getElementById('refresh-button').addEventListener('click', refresh);
                         document.getElementById('configure-button').addEventListener('click', configure);
                     });
+                    
+                    function saveChat() {
+                        vscode.postMessage({ type: 'saveChat' });
+                    }
+                    
+                    function quickSaveChat() {
+                        vscode.postMessage({ type: 'quickSaveChat' });
+                    }
                     
                     function refresh() {
                         vscode.postMessage({ type: 'refresh' });
@@ -711,6 +812,13 @@ ${cleanPrompts}
                         const content = document.getElementById('content');
                         
                         switch (message.type) {
+                            case 'loading':
+                                content.innerHTML = \`
+                                    <div class="loading">
+                                        <p>\${message.message}</p>
+                                    </div>
+                                \`;
+                                break;
                             case 'prompts':
                                 displayPrompts(message.data);
                                 break;
@@ -746,6 +854,14 @@ ${cleanPrompts}
                                         tryAgainButton.addEventListener('click', refresh);
                                     }
                                 }, 0);
+                                break;
+                            case 'checkLoadingState':
+                                // Check if we're still in loading state after timeout
+                                const loadingElement = content.querySelector('.loading');
+                                if (loadingElement && loadingElement.textContent.includes('Loading prompts')) {
+                                    // Still loading after timeout, request a retry
+                                    vscode.postMessage({ type: 'fallbackRefresh' });
+                                }
                                 break;
                         }
                     });
@@ -808,11 +924,19 @@ ${cleanPrompts}
                             promptItem.setAttribute('data-loaded', 'true');
                             promptItem.innerHTML = \`
                                 <h4>📅 \${details.timestamp}</h4>
-                                <div class="prompt-details-content">\${details.prompts}</div>
-                                \${details.response && details.response !== 'undefined' ? \`
-                                <h4>💬 Response</h4>
-                                <div class="prompt-details-content">\${details.response}</div>
-                                \` : ''}
+                                \${details.conversation ? 
+                                    \`<div class="conversation-section">
+                                        <h4>💬 Chat Conversation</h4>
+                                        <div class="conversation-content">\${details.conversation}</div>
+                                    </div>\` : 
+                                    \`<div class="prompts-section">
+                                        <div class="prompt-details-content">\${details.prompts}</div>
+                                        \${details.response && details.response !== 'undefined' ? \`
+                                        <h4>💬 Response</h4>
+                                        <div class="prompt-details-content">\${details.response}</div>
+                                        \` : ''}
+                                    </div>\`
+                                }
                                 <h4>📁 Modified Files</h4>
                                 <div class="prompt-details-content">\${details.files.map(f => \`• \${f}\`).join('\\n')}</div>
                             \`;

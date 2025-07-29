@@ -81,21 +81,21 @@ export class AIPromptTracker implements vscode.Disposable {
 
     private setupAutomatedCopilotMonitoring(): void {
         console.log('AIPromptTracker: Setting up automated Copilot interaction monitoring');
-        
+
         // Register commands for manual interaction capture (backward compatibility)
         this.registerCopilotCaptureCommands();
-        
+
         // Set up automatic Copilot interaction detection
         const copilotListener = this.aiAssistantDetectionService.onInteractionDetected((interaction) => {
             console.log(`AIPromptTracker: Auto-detected ${interaction.aiProvider} ${interaction.interactionType} interaction:`);
             console.log(`  - Prompt: ${interaction.prompt.substring(0, 100)}...`);
             console.log(`  - File: ${interaction.fileContext?.fileName || 'none'}`);
-            
+
             this.sessionMonitor.addInteraction(interaction);
             this.updateStatusBar();
         });
         this.disposables.push(copilotListener);
-        
+
         // Keep the existing manual detection for fallback
         this.setupAutomaticCopilotDetection();
     }
@@ -192,7 +192,7 @@ export class AIPromptTracker implements vscode.Disposable {
 
     private setupAutomatedGitCommitMonitoring(): void {
         console.log('AIPromptTracker: Setting up automated Git commit monitoring');
-        
+
         // Set up automatic commit detection and correlation
         const commitListener = this.gitService.onCommit(async (commitInfo) => {
             if (this.autoCorrelationEnabled) {
@@ -200,7 +200,7 @@ export class AIPromptTracker implements vscode.Disposable {
             }
         });
         this.disposables.push(commitListener);
-        
+
         console.log('AIPromptTracker: Automated Git commit monitoring enabled');
     }
 
@@ -307,7 +307,7 @@ export class AIPromptTracker implements vscode.Disposable {
         }
 
         const recentInteractions = this.sessionMonitor.getRecentInteractions(5);
-        const interactionSummary = recentInteractions.map((interaction, index) => 
+        const interactionSummary = recentInteractions.map((interaction, index) =>
             `${index + 1}. [${interaction.interactionType}] ${interaction.prompt.substring(0, 50)}...`
         ).join('\n');
 
@@ -331,7 +331,7 @@ ${interactionSummary || 'No interactions yet'}`;
      */
     private async handleAutomaticCommitCorrelation(commitInfo: GitInfo & { changedFiles: string[] }): Promise<void> {
         console.log(`AIPromptTracker: Auto-correlating session with commit ${commitInfo.commitHash}`);
-        
+
         const config = this.configManager.getConfiguration();
         if (!config) {
             console.log('AIPromptTracker: Repository not configured, skipping auto-correlation');
@@ -344,12 +344,12 @@ ${interactionSummary || 'No interactions yet'}`;
             console.log(`AIPromptTracker: Current session check:`);
             console.log(`  - Session exists: ${!!currentSession}`);
             console.log(`  - Interactions count: ${currentSession?.interactions.length || 0}`);
-            
+
             if (!currentSession || currentSession.interactions.length === 0) {
                 console.log('AIPromptTracker: No interactions to correlate with commit');
                 return;
             }
-            
+
             console.log(`AIPromptTracker: Session ${currentSession.sessionId} interactions:`);
             currentSession.interactions.forEach((interaction, index) => {
                 console.log(`  ${index + 1}. ${interaction.aiProvider} ${interaction.interactionType}: ${interaction.prompt.substring(0, 50)}...`);
@@ -368,11 +368,11 @@ ${interactionSummary || 'No interactions yet'}`;
             if (finalizedSession) {
                 // Save session to GitHub
                 await this.saveSessionToGitHub(finalizedSession);
-                
+
                 // Show subtle notification
                 const message = `Auto-saved ${finalizedSession.interactions.length} Copilot interactions for commit ${commitInfo.commitHash.substring(0, 7)}`;
                 vscode.window.showInformationMessage(message);
-                
+
                 console.log(`AIPromptTracker: Successfully auto-correlated session with ${finalizedSession.interactions.length} interactions`);
             }
 
@@ -433,7 +433,7 @@ ${interactionSummary || 'No interactions yet'}`;
 
             // Save session to GitHub
             await this.saveSessionToGitHub(finalizedSession);
-            
+
             if (source === 'manual') {
                 vscode.window.showInformationMessage(
                     `Session correlated with commit ${gitInfo.commitHash.substring(0, 7)} and saved to GitHub!`
@@ -463,7 +463,7 @@ ${interactionSummary || 'No interactions yet'}`;
         console.log(`  - Session ID: ${sanitizedSession.sessionId}`);
         console.log(`  - Interactions: ${sanitizedSession.interactions.length}`);
         console.log(`  - Formatted prompt preview: ${formattedPrompt.substring(0, 200)}...`);
-        
+
         const promptEntry: PromptEntry = {
             prompt: formattedPrompt,
             response: this.formatSessionResponse(sanitizedSession),
@@ -499,7 +499,7 @@ ${interactionSummary || 'No interactions yet'}`;
                 response: interaction.response ? await ContentSanitizer.sanitizeContent(interaction.response, workspaceRoot) : undefined,
                 fileContext: interaction.fileContext ? {
                     ...interaction.fileContext,
-                    content: interaction.fileContext.content ? 
+                    content: interaction.fileContext.content ?
                         await ContentSanitizer.sanitizeContent(interaction.fileContext.content, workspaceRoot) : undefined
                 } : undefined
             }))
@@ -513,7 +513,7 @@ ${interactionSummary || 'No interactions yet'}`;
 
     private formatSessionAsPrompt(session: DevelopmentSession): string {
         console.log(`AIPromptTracker: Formatting session with ${session.interactions.length} interactions`);
-        
+
         if (session.interactions.length === 0) {
             return 'No AI interactions captured in this session';
         }
@@ -522,10 +522,10 @@ ${interactionSummary || 'No interactions yet'}`;
         const interactions = session.interactions
             .map((interaction, index) => {
                 console.log(`AIPromptTracker: Interaction ${index + 1}: ${interaction.interactionType} - ${interaction.prompt.substring(0, 100)}...`);
-                
+
                 // Try to detect and preserve JSON structure in prompts
                 let formattedPrompt = interaction.prompt;
-                
+
                 // Check if the prompt contains JSON data
                 try {
                     const jsonMatch = interaction.prompt.match(/\{[\s\S]*\}/);
@@ -533,14 +533,14 @@ ${interactionSummary || 'No interactions yet'}`;
                         const parsedJson = JSON.parse(jsonMatch[0]);
                         // If it's valid JSON, format it nicely
                         formattedPrompt = interaction.prompt.replace(
-                            jsonMatch[0], 
+                            jsonMatch[0],
                             JSON.stringify(parsedJson, null, 2)
                         );
                     }
                 } catch (error) {
                     // If JSON parsing fails, keep the original format
                 }
-                
+
                 return `[${index + 1}] ${interaction.interactionType.toUpperCase()}: ${formattedPrompt}`;
             })
             .join('\n\n');
@@ -587,11 +587,11 @@ ${interactionSummary || 'No interactions yet'}`;
         const session = this.sessionMonitor.getCurrentSession();
         const interactionCount = session?.interactions.length || 0;
         const monitoringStats = this.backgroundMonitoringService.getMonitoringStats();
-        
+
         if (config) {
             const autoStatus = this.autoCorrelationEnabled ? '🤖' : '⏸️';
             this.statusBarItem.text = `$(copilot) ${interactionCount} ${autoStatus}`;
-            
+
             const effectiveness = Math.round(monitoringStats.automationEffectiveness);
             this.statusBarItem.tooltip = `AI Prompt Tracker: ${interactionCount} interactions in current session\n` +
                 `Repository: ${config.githubRepo}\n` +
@@ -611,15 +611,15 @@ ${interactionSummary || 'No interactions yet'}`;
      */
     private async toggleAutoCorrelation(): Promise<void> {
         this.autoCorrelationEnabled = !this.autoCorrelationEnabled;
-        
+
         // Update background monitoring service configuration
         this.backgroundMonitoringService.updateAutomationConfig({
             autoCorrelationEnabled: this.autoCorrelationEnabled
         });
-        
+
         const status = this.autoCorrelationEnabled ? 'enabled' : 'disabled';
         vscode.window.showInformationMessage(`Automatic commit correlation ${status}`);
-        
+
         this.updateStatusBar();
         console.log(`AIPromptTracker: Auto-correlation ${status}`);
     }
@@ -630,7 +630,7 @@ ${interactionSummary || 'No interactions yet'}`;
     private async showAutomationStatus(): Promise<void> {
         const statusReport = this.backgroundMonitoringService.getStatusReport();
         const analytics = this.smartSessionManager.getDevelopmentAnalytics();
-        
+
         const statusMessage = `🤖 AUTOMATION STATUS\n\n` +
             `📊 Statistics:\n` +
             `• Sessions monitored: ${statusReport.stats.sessionsMonitored}\n` +
@@ -647,7 +647,7 @@ ${interactionSummary || 'No interactions yet'}`;
             `• Detection sensitivity: ${statusReport.config.detectionSensitivity.toUpperCase()}\n` +
             `• Quiet hours: ${statusReport.isQuietHours ? 'ACTIVE' : 'INACTIVE'}\n\n` +
             `🕐 Working Hours: ${analytics.workingHours.start}:00 - ${analytics.workingHours.end}:00`;
-        
+
         vscode.window.showInformationMessage(statusMessage, { modal: true });
     }
 
@@ -660,10 +660,10 @@ ${interactionSummary || 'No interactions yet'}`;
             vscode.window.showInformationMessage('No active session to analyze');
             return;
         }
-        
+
         const insights = this.smartSessionManager.analyzeSessionQuality(currentSession);
         const analytics = this.smartSessionManager.getDevelopmentAnalytics();
-        
+
         const insightsMessage = `🧠 SESSION INSIGHTS\n\n` +
             `📈 Current Session (${currentSession.sessionId}): \n` +
             `• Quality: ${insights.sessionQuality.toUpperCase()}\n` +
@@ -678,20 +678,95 @@ ${interactionSummary || 'No interactions yet'}`;
             `• Total sessions analyzed: ${analytics.totalSessions}\n` +
             `• Top recommendations:\n` +
             analytics.topRecommendations.slice(0, 2).map(rec => `  - ${rec}`).join('\n');
-        
+
         vscode.window.showInformationMessage(insightsMessage, { modal: true });
     }
 
     private isTestEnvironment(): boolean {
         // Detect if running in test environment
-        return process.env.NODE_ENV === 'test' || 
-               process.env.VSCODE_TEST === 'true' ||
-               typeof global !== 'undefined' && (global as any).suite !== undefined;
+        return process.env.NODE_ENV === 'test' ||
+            process.env.VSCODE_TEST === 'true' ||
+            typeof global !== 'undefined' && (global as any).suite !== undefined;
+    }
+
+    public async saveManualChatSession(chatData: any): Promise<void> {
+        try {
+            const config = this.configManager.getConfiguration();
+            if (!config) {
+                throw new Error('Repository not configured');
+            }
+
+            // Get current git info
+            const gitInfo = await this.gitService.getCurrentGitInfo();
+
+            // Sanitize the chat content
+            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const sanitizedPrompt = await ContentSanitizer.sanitizeContent(chatData.prompt, workspaceRoot);
+            const sanitizedResponse = chatData.response ?
+                await ContentSanitizer.sanitizeContent(chatData.response, workspaceRoot) :
+                'Manual chat entry - no response captured';
+
+            // Format the manual chat as a prompt entry
+            let formattedPrompt = `[1] CHAT: ${sanitizedPrompt}`;
+
+            // Handle conversation array if present
+            let conversation = undefined;
+            if (chatData.conversation && Array.isArray(chatData.conversation)) {
+                // Sanitize conversation turns
+                conversation = await Promise.all(
+                    chatData.conversation.map(async (turn: any, index: number) => ({
+                        prompt: await ContentSanitizer.sanitizeContent(turn.prompt, workspaceRoot),
+                        response: turn.response ?
+                            await ContentSanitizer.sanitizeContent(turn.response, workspaceRoot) :
+                            'No response captured',
+                        timestamp: turn.timestamp,
+                        type: turn.type || 'user'
+                    }))
+                );
+
+                // Update formatted prompt to show it's a conversation
+                formattedPrompt = `[1] CHAT_CONVERSATION: ${sanitizedPrompt} (${conversation.length} turns)`;
+            }
+
+            const promptEntry: any = {
+                prompt: formattedPrompt,
+                response: sanitizedResponse,
+                timestamp: chatData.timestamp,
+                gitInfo: {
+                    commitHash: gitInfo?.commitHash || 'unknown',
+                    branch: gitInfo?.branch || 'unknown',
+                    author: gitInfo?.author || 'unknown',
+                    repository: gitInfo?.repository || 'unknown',
+                    changedFiles: [] // Manual chat doesn't have changed files
+                },
+                metadata: {
+                    vscodeVersion: vscode.version,
+                    extensionVersion: this.context.extension.packageJSON.version
+                }
+            };
+
+            // Add conversation array if present
+            if (conversation) {
+                promptEntry.conversation = conversation;
+            }
+
+            await this.githubService.savePromptToRepository(
+                config.githubRepo.split('/')[0],
+                config.githubRepo.split('/')[1],
+                promptEntry,
+                config.saveLocation
+            );
+
+            console.log(`AIPromptTracker: Manual chat session saved successfully`);
+        } catch (error) {
+            console.error('Error saving manual chat session:', error);
+            throw error;
+        }
     }
 
     public dispose(): void {
         console.log('AIPromptTracker: Starting disposal...');
-        
+
         // Dispose of all registered disposables first
         this.disposables.forEach(d => {
             try {
@@ -700,41 +775,41 @@ ${interactionSummary || 'No interactions yet'}`;
                 console.error('Error disposing resource:', error);
             }
         });
-        
+
         // Clear the disposables array
         this.disposables.length = 0;
-        
+
         // Dispose of services in reverse order of initialization
         try {
             this.backgroundMonitoringService.dispose();
         } catch (error) {
             console.error('Error disposing backgroundMonitoringService:', error);
         }
-        
+
         try {
             this.smartSessionManager.dispose();
         } catch (error) {
             console.error('Error disposing smartSessionManager:', error);
         }
-        
+
         try {
             this.aiAssistantDetectionService.dispose();
         } catch (error) {
             console.error('Error disposing aiAssistantDetectionService:', error);
         }
-        
+
         try {
             this.gitService.dispose();
         } catch (error) {
             console.error('Error disposing gitService:', error);
         }
-        
+
         try {
             this.githubService.dispose();
         } catch (error) {
             console.error('Error disposing githubService:', error);
         }
-        
+
         console.log('AIPromptTracker: Disposal completed');
     }
 }

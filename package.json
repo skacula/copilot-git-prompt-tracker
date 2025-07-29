@@ -68,6 +68,21 @@
         "category": "AI Prompt Tracker"
       },
       {
+        "command": "copilotPromptTracker.saveChatConversation",
+        "title": "💬 Save Chat Conversation",
+        "category": "AI Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.quickSaveChat",
+        "title": "⚡ Quick Save Current Chat",
+        "category": "AI Prompt Tracker"
+      },
+      {
+        "command": "copilotPromptTracker.saveChatWithContext",
+        "title": "📝 Save Chat with Code Context",
+        "category": "AI Prompt Tracker"
+      },
+      {
         "command": "copilotPromptTracker.showSession",
         "title": "Show Current Session",
         "category": "AI Prompt Tracker"
@@ -238,6 +253,18 @@
         {
           "command": "copilotPromptTracker.showSessionInsights",
           "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.saveChatConversation",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.quickSaveChat",
+          "when": "true"
+        },
+        {
+          "command": "copilotPromptTracker.saveChatWithContext",
+          "when": "true"
         }
       ],
       "view/title": [
@@ -252,7 +279,20 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "copilotPromptTracker.quickSaveChat",
+        "key": "ctrl+shift+alt+s",
+        "mac": "cmd+shift+alt+s",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "copilotPromptTracker.saveChatConversation",
+        "key": "ctrl+shift+alt+c",
+        "mac": "cmd+shift+alt+c"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

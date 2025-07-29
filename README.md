@@ -44,6 +44,7 @@ This extension is designed to **passively monitor and track** your AI assistant 
 ### 📊 AI Interaction Tracking
 - **Multiple AI Providers**: Monitors GitHub Copilot, Claude Code, Cursor, and other assistants
 - **Multiple Interaction Types**: Tracks chat, inline suggestions, code comments, and file modifications
+- **Conversation Arrays**: Stores multi-turn chat conversations as structured arrays of prompt-response pairs
 - **Rich Context Capture**: Records file names, languages, code selections, and timestamps
 - **Prompt Handling**: 
   - **Copilot**: Captures actual prompts and responses directly
@@ -135,6 +136,8 @@ Access these through the Command Palette (`Cmd+Shift+P`):
 - **`Copilot Tracker: Show Current Session`** - View your current development session and recent AI interactions
 - **`Copilot Tracker: Record Interaction`** - Manually record an AI interaction
 - **`Copilot Tracker: Capture Last Chat`** - Capture your most recent AI chat (Copilot only)
+- **`Copilot Tracker: Save Chat Conversation`** - Save a multi-turn chat conversation with prompts and responses (Ctrl+Shift+Alt+S)
+- **`Copilot Tracker: Quick Save Chat`** - Quick save current chat conversation (Ctrl+Shift+Alt+C)
 - **`Copilot Tracker: Correlate with Commit`** - Link current session with Git commit and save to GitHub
 
 #### Configuration Commands

@@ -3,10 +3,18 @@ import * as vscode from 'vscode';
 // Dynamic import for Octokit to handle ES module compatibility
 let Octokit: any = null;
 
+export interface ConversationTurn {
+    prompt: string;
+    response?: string;
+    timestamp: string;
+    type: 'user' | 'assistant';
+}
+
 export interface PromptEntry {
     timestamp: string;
     prompt: string;
     response?: string;
+    conversation?: ConversationTurn[]; // New: Array of conversation turns
     gitInfo: {
         commitHash: string;
         branch: string;
@@ -49,7 +57,7 @@ export class GitHubService {
             console.log('Starting GitHub authentication...');
 
             // Use VS Code's built-in GitHub authentication
-            this.currentSession = await vscode.authentication.getSession('github', ['repo'], { 
+            this.currentSession = await vscode.authentication.getSession('github', ['repo'], {
                 createIfNone: true,
                 clearSessionPreference: false
             });
@@ -72,7 +80,7 @@ export class GitHubService {
             console.log('Authenticated GitHub user:', user.login);
             console.log('User type:', user.type);
             console.log('User permissions:', user.permissions);
-            
+
             return true;
         } catch (error) {
             console.error('GitHub authentication failed:', error);
@@ -80,8 +88,8 @@ export class GitHubService {
             // Clear session if authentication failed
             if (this.currentSession) {
                 try {
-                    await vscode.authentication.getSession('github', ['repo'], { 
-                        clearSessionPreference: true 
+                    await vscode.authentication.getSession('github', ['repo'], {
+                        clearSessionPreference: true
                     });
                 } catch (clearError) {
                     console.error('Failed to clear session:', clearError);
@@ -99,8 +107,8 @@ export class GitHubService {
         if (this.currentSession) {
             try {
                 // Clear the session preference to force re-authentication next time
-                await vscode.authentication.getSession('github', ['repo'], { 
-                    clearSessionPreference: true 
+                await vscode.authentication.getSession('github', ['repo'], {
+                    clearSessionPreference: true
                 });
                 this.currentSession = null;
                 this.octokit = null;
@@ -113,10 +121,10 @@ export class GitHubService {
 
     public async ensureAuthenticated(): Promise<boolean> {
         console.log('GitHubService: Ensuring authentication...');
-        
+
         if (this.isAuthenticated()) {
             console.log('GitHubService: Already authenticated, verifying with API...');
-            
+
             // Verify the authentication actually works
             try {
                 const { data: user } = await this.octokit.rest.users.getAuthenticated();
@@ -129,11 +137,11 @@ export class GitHubService {
                 this.octokit = null;
             }
         }
-        
+
         console.log('GitHubService: Not authenticated or verification failed, attempting to authenticate...');
         const result = await this.authenticate();
         console.log(`GitHubService: Authentication result: ${result}`);
-        
+
         return result;
     }
 
@@ -141,9 +149,9 @@ export class GitHubService {
         const hasSession = this.currentSession !== null;
         const hasOctokit = this.octokit !== null;
         const hasValidToken = this.currentSession?.accessToken !== undefined;
-        
+
         console.log(`GitHubService: Authentication check - session: ${hasSession}, octokit: ${hasOctokit}, token: ${hasValidToken}`);
-        
+
         return hasSession && hasOctokit && hasValidToken;
     }
 
@@ -173,7 +181,7 @@ export class GitHubService {
         }
     }
 
-    public async getUserOrganizations(): Promise<Array<{login: string, avatar_url: string}>> {
+    public async getUserOrganizations(): Promise<Array<{ login: string, avatar_url: string }>> {
         if (!this.octokit) {
             throw new Error('GitHub service not authenticated');
         }
@@ -192,14 +200,14 @@ export class GitHubService {
         }
     }
 
-    public async getUserRepositories(owner?: string): Promise<Array<{name: string, full_name: string, private: boolean, description: string | null}>> {
+    public async getUserRepositories(owner?: string): Promise<Array<{ name: string, full_name: string, private: boolean, description: string | null }>> {
         if (!this.octokit) {
             throw new Error('GitHub service not authenticated');
         }
 
         try {
             let repositories;
-            
+
             if (owner) {
                 // Get repositories for a specific organization
                 const { data: repos } = await this.octokit.rest.repos.listForOrg({
@@ -241,10 +249,10 @@ export class GitHubService {
             console.log('GitHubService: Operation cancelled - service disposed');
             return false;
         }
-        
+
         try {
             console.log(`GitHubService: savePromptToRepository called - owner: ${owner}, repo: ${repo}, saveLocation: ${saveLocation}`);
-            
+
             // Ensure we're authenticated before proceeding
             const authResult = await this.ensureAuthenticated();
             if (!authResult) {
@@ -254,7 +262,7 @@ export class GitHubService {
             }
 
             console.log(`GitHubService: Saving prompt to ${owner}/${repo} in ${saveLocation}`);
-            
+
             // Check if repository exists and user has access
             try {
                 const repoInfo = await this.octokit!.rest.repos.get({ owner, repo });
@@ -262,7 +270,7 @@ export class GitHubService {
                 console.log(`GitHubService: Repository details - private: ${repoInfo.data.private}, permissions: ${JSON.stringify(repoInfo.data.permissions)}`);
             } catch (repoError: any) {
                 console.error(`GitHubService: Repository ${owner}/${repo} not accessible:`, repoError.status, repoError.message);
-                
+
                 if (repoError.status === 404) {
                     vscode.window.showErrorMessage(
                         `Repository ${owner}/${repo} does not exist. Please create it first using "Initialize Project Configuration" command.`
@@ -528,7 +536,7 @@ export class GitHubService {
         // Ask user about repository visibility
         const config = vscode.workspace.getConfiguration('copilotPromptTracker');
         const defaultPrivate = config.get<boolean>('defaultPrivateRepo', true);
-        
+
         const visibilityChoice = await vscode.window.showQuickPick([
             {
                 label: '$(lock) Private Repository',
@@ -538,7 +546,7 @@ export class GitHubService {
                 value: true
             },
             {
-                label: '$(globe) Public Repository', 
+                label: '$(globe) Public Repository',
                 description: 'Anyone can see this repository',
                 detail: 'Consider carefully - prompts may contain sensitive code context',
                 picked: !defaultPrivate,
@@ -596,7 +604,7 @@ export class GitHubService {
             // Create or update README with our content
             console.log(readmeExists ? 'Updating README file...' : 'Creating README file...');
             const currentUser = createResult.data.owner.login; // Use the owner from the creation response
-            
+
             const readmeContent = `# Copilot Prompts Repository
 
 This repository stores Copilot prompts and AI interactions from multiple projects.
@@ -633,7 +641,7 @@ Generated by VS Code Copilot Git Prompt Tracker extension.
 
             console.log('Encoding README content...');
             const encodedReadme = Buffer.from(readmeContent).toString('base64');
-            
+
             // Get the existing README SHA if it exists
             let existingSha: string | undefined;
             if (readmeExists) {
@@ -650,7 +658,7 @@ Generated by VS Code Copilot Git Prompt Tracker extension.
                     console.log('Error getting existing README SHA:', error);
                 }
             }
-            
+
             await this.octokit!.rest.repos.createOrUpdateFileContents({
                 owner: currentUser,
                 repo: name,
@@ -680,7 +688,7 @@ Generated by VS Code Copilot Git Prompt Tracker extension.
             console.error('Error status:', error.status);
             console.error('Error message:', error.message);
             console.error('Error response:', error.response?.data);
-            
+
             if (error.status === 422) {
                 vscode.window.showErrorMessage(`Repository "${name}" already exists or name is invalid.`);
             } else if (error.status === 401) {
@@ -742,14 +750,14 @@ Generated by VS Code Copilot Git Prompt Tracker extension.
     public dispose(): void {
         console.log('GitHubService: Starting disposal...');
         this._disposed = true;
-        
+
         try {
             this.octokit = null;
             this.currentSession = null;
         } catch (error) {
             console.error('GitHubService: Error during disposal:', error);
         }
-        
+
         console.log('GitHubService: Disposal completed');
     }
 }
