@@ -1,10 +1,29 @@
-# Copilot Git Prompt Tracker
+# AI Git Prompt Tracker
 
-A VS Code extension that **monitors** your GitHub Copilot interactions and correlates them with Git commits to provide insights into your AI-assisted development workflow.
+A VS Code extension that **monitors** your AI assistant interactions (GitHub Copilot, Claude Code, Cursor) and correlates them with Git commits to provide insights into your AI-assisted development workflow.
 
 ## 🎯 Overview
 
-This extension is designed to **passively monitor and track** your actual Copilot interactions, then correlate them with Git commits to understand how AI assistance influences your development process. It does **not** suggest prompts or templates, but rather focuses on capturing and analyzing your natural workflow.
+This extension is designed to **passively monitor and track** your AI assistant interactions, then correlate them with Git commits to understand how AI assistance influences your development process. It does **not** suggest prompts or templates, but rather focuses on capturing and analyzing your natural workflow.
+
+### 🤖 Multi-AI Assistant Support
+
+**GitHub Copilot** - Full Integration ✅
+- Direct access to actual prompts and responses via VS Code APIs
+- Complete conversation context and real-time tracking
+- Full feature support with accurate prompt capture
+
+**Claude Code** - Inference-Based Detection ⚠️
+- **Important**: Prompts are inferred, not captured directly
+- Claude Code operates as standalone CLI tool without VS Code integration
+- Extension detects code generation and infers likely prompts from patterns
+- Captures generated responses and file context with high accuracy
+- Uses sophisticated pattern recognition for prompt inference
+
+**Other AI Assistants (Cursor, etc.)** - Pattern-Based Detection 🔍
+- Detection capabilities vary by assistant architecture
+- Generated code and file modifications are tracked
+- Basic prompt inference based on code patterns
 
 ## ✨ Key Features
 
@@ -22,11 +41,15 @@ This extension is designed to **passively monitor and track** your actual Copilo
 - **JWT Token Detection**: Identifies and redacts JSON Web Tokens
 - **Database URL Sanitization**: Protects database connection strings
 
-### 📊 Interaction Tracking
-- **Multiple Interaction Types**: Monitors chat, inline suggestions, and code comments
+### 📊 AI Interaction Tracking
+- **Multiple AI Providers**: Monitors GitHub Copilot, Claude Code, Cursor, and other assistants
+- **Multiple Interaction Types**: Tracks chat, inline suggestions, code comments, and file modifications
 - **Rich Context Capture**: Records file names, languages, code selections, and timestamps
-- **Response Recording**: Captures both your prompts and Copilot's responses
-- **Automatic Detection**: Attempts to identify Copilot-generated code changes
+- **Prompt Handling**: 
+  - **Copilot**: Captures actual prompts and responses directly
+  - **Claude Code**: Infers prompts from generated code patterns and context
+  - **Others**: Pattern-based detection and basic inference
+- **Provider Identification**: Automatically identifies which AI assistant generated each interaction
 
 ### 🔗 Git Integration
 - **Commit Correlation**: Manually trigger correlation between sessions and commits
@@ -50,7 +73,11 @@ This extension is designed to **passively monitor and track** your actual Copilo
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-- VS Code with GitHub Copilot installed and configured
+- VS Code (version 1.102.0+)
+- At least one AI assistant:
+  - GitHub Copilot (for full prompt capture)
+  - Claude Code (for inference-based detection)
+  - Cursor or other AI assistants (for pattern-based detection)
 - A Git repository
 - A GitHub account for storing session data
 
@@ -71,10 +98,11 @@ code --install-extension copilot-git-prompt-tracker-0.0.1.vsix
 ### Initial Configuration
 
 #### Quick Setup
-1. Click the Copilot tracker icon (🎯) in the activity bar
+1. Click the AI tracker icon (🎯) in the activity bar
 2. Click "Configure Repository" in the view
 3. Choose to create a new repository or use an existing one
 4. The extension handles GitHub OAuth authentication automatically
+5. Start using your AI assistants - interactions are automatically detected and tracked
 
 #### Detailed Configuration Process
 1. **Repository Setup**:
@@ -91,9 +119,12 @@ code --install-extension copilot-git-prompt-tracker-0.0.1.vsix
 
 The extension works in the background to monitor your development sessions:
 
-1. **Start Working**: Begin coding with Copilot as usual
-2. **Interactions Are Tracked**: Extension automatically detects potential Copilot interactions
-3. **Manual Recording** (when needed): Use commands to capture specific interactions
+1. **Start Working**: Begin coding with any supported AI assistant (Copilot, Claude Code, Cursor, etc.)
+2. **Interactions Are Tracked**: Extension automatically detects AI interactions with provider identification
+3. **Different Detection Methods**:
+   - **Copilot**: Direct API integration captures actual prompts
+   - **Claude Code**: File monitoring and pattern analysis infers prompts
+   - **Others**: Basic detection and inference based on code patterns
 4. **Commit Correlation**: When ready to commit, correlate your session with the commit
 
 ### Available Commands
@@ -101,9 +132,9 @@ The extension works in the background to monitor your development sessions:
 Access these through the Command Palette (`Cmd+Shift+P`):
 
 #### Core Commands
-- **`Copilot Tracker: Show Current Session`** - View your current development session and recent interactions
-- **`Copilot Tracker: Record Interaction`** - Manually record a Copilot interaction
-- **`Copilot Tracker: Capture Last Chat`** - Capture your most recent Copilot chat
+- **`Copilot Tracker: Show Current Session`** - View your current development session and recent AI interactions
+- **`Copilot Tracker: Record Interaction`** - Manually record an AI interaction
+- **`Copilot Tracker: Capture Last Chat`** - Capture your most recent AI chat (Copilot only)
 - **`Copilot Tracker: Correlate with Commit`** - Link current session with Git commit and save to GitHub
 
 #### Configuration Commands
@@ -111,15 +142,16 @@ Access these through the Command Palette (`Cmd+Shift+P`):
 - **`Copilot Tracker: Sign Out from GitHub`** - Clean sign out when needed
 
 #### Navigation Commands
-- **`Copilot Tracker: View Project Prompts`** - View prompts for current project only
-- **`Copilot Tracker: View Prompt History`** - Browse all prompts with project filtering
+- **`Copilot Tracker: View Project Prompts`** - View AI prompts for current project only
+- **`Copilot Tracker: View Prompt History`** - Browse all AI prompts with project filtering
 
 ### GUI Interface
 
 #### Activity Bar Integration
-- Look for the tracker icon (🎯) in the left activity bar
-- Click to open the Copilot Prompt Tracker view
-- Browse your saved prompts in chronological order
+- Look for the AI tracker icon (🎯) in the left activity bar
+- Click to open the AI Git Prompt Tracker view
+- Browse your saved AI interactions in chronological order
+- See provider identification (Copilot, Claude Code, etc.) for each interaction
 - Use refresh and configure buttons in the view header
 
 #### Interactive Features
@@ -131,7 +163,7 @@ Access these through the Command Palette (`Cmd+Shift+P`):
 ### Status Bar Integration
 
 The status bar shows:
-- Number of interactions in current session
+- Number of AI interactions in current session
 - Configuration status (🤖 = automation enabled)
 - Quick access to session view
 
