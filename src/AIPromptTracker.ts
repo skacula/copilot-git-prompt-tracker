@@ -518,11 +518,30 @@ ${interactionSummary || 'No interactions yet'}`;
             return 'No AI interactions captured in this session';
         }
 
-        // Create clean, focused prompt entries
+        // Create clean, focused prompt entries with better JSON handling
         const interactions = session.interactions
             .map((interaction, index) => {
                 console.log(`AIPromptTracker: Interaction ${index + 1}: ${interaction.interactionType} - ${interaction.prompt.substring(0, 100)}...`);
-                return `[${index + 1}] ${interaction.interactionType.toUpperCase()}: ${interaction.prompt}`;
+                
+                // Try to detect and preserve JSON structure in prompts
+                let formattedPrompt = interaction.prompt;
+                
+                // Check if the prompt contains JSON data
+                try {
+                    const jsonMatch = interaction.prompt.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const parsedJson = JSON.parse(jsonMatch[0]);
+                        // If it's valid JSON, format it nicely
+                        formattedPrompt = interaction.prompt.replace(
+                            jsonMatch[0], 
+                            JSON.stringify(parsedJson, null, 2)
+                        );
+                    }
+                } catch (error) {
+                    // If JSON parsing fails, keep the original format
+                }
+                
+                return `[${index + 1}] ${interaction.interactionType.toUpperCase()}: ${formattedPrompt}`;
             })
             .join('\n\n');
 

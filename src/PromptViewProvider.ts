@@ -174,10 +174,10 @@ ${cleanPrompts}
                     cleanPrompts += currentInteraction + '\n\n';
                 }
                 const [, num, type, content] = interactionMatch;
-                currentInteraction = `**${num}. ${type}:** ${content}`;
+                currentInteraction = `**${num}. ${type}:**\n  ${content}`;
             } else if (line.trim() && currentInteraction) {
                 // Continue building current interaction
-                currentInteraction += '\n' + line;
+                currentInteraction += '\n  ' + line;
             }
         }
         
@@ -250,8 +250,25 @@ ${cleanPrompts}
     }
 
     private extractJsonFromContent(content: string): any {
-        // Look for JSON objects within the content
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        // First, try to find and unescape JSON that might be escaped in the string
+        const escapedJsonMatch = content.match(/\{\\n\s*"[\s\S]*?\}/);
+        if (escapedJsonMatch) {
+            try {
+                // Unescape the JSON string
+                let unescapedJson = escapedJsonMatch[0]
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\"/g, '"')
+                    .replace(/\\'/g, "'")
+                    .replace(/\\\\/g, '\\');
+                
+                return JSON.parse(unescapedJson);
+            } catch (error) {
+                // Continue to other methods if unescaping fails
+            }
+        }
+        
+        // Look for regular JSON objects within the content
+        const jsonMatch = content.match(/\{[\s\S]*?\}/);
         if (jsonMatch) {
             try {
                 return JSON.parse(jsonMatch[0]);
@@ -260,15 +277,27 @@ ${cleanPrompts}
             }
         }
         
-        // Look for JSON-like key:value patterns
-        const keyValuePattern = /(\w+):\s*([^,}\n]+)/g;
+        // Look for JSON-like key:value patterns with quoted strings
+        const quotedKeyValuePattern = /"(\w+)":\s*"([^"]+)"/g;
         let match;
         const jsonLike: any = {};
         let hasMatches = false;
         
-        while ((match = keyValuePattern.exec(content)) !== null) {
+        while ((match = quotedKeyValuePattern.exec(content)) !== null) {
             const [, key, value] = match;
             jsonLike[key] = value.trim();
+            hasMatches = true;
+        }
+        
+        if (hasMatches) {
+            return jsonLike;
+        }
+        
+        // Look for unquoted JSON-like key:value patterns
+        const keyValuePattern = /(\w+):\s*([^,}\n]+)/g;
+        while ((match = keyValuePattern.exec(content)) !== null) {
+            const [, key, value] = match;
+            jsonLike[key] = value.trim().replace(/^["']|["']$/g, ''); // Remove surrounding quotes
             hasMatches = true;
         }
         
@@ -280,7 +309,12 @@ ${cleanPrompts}
         let formatted = header + '\n';
         
         for (const [key, value] of Object.entries(jsonData)) {
-            formatted += `  ${key}: ${value}\n`;
+            // Handle nested objects and arrays
+            if (typeof value === 'object' && value !== null) {
+                formatted += `  ${key}: ${JSON.stringify(value, null, 4).replace(/\n/g, '\n    ')}\n`;
+            } else {
+                formatted += `  ${key}: ${value}\n`;
+            }
         }
         
         return formatted.trim();
